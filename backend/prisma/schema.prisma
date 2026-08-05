@@ -1,0 +1,275 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+
+
+model Hotel {
+  id         Int      @id @default(autoincrement())
+  hotel_name String
+  address    String
+  city       String
+  country    String
+  timezone   String
+  currency   String
+  created_at DateTime @default(now())
+  rooms      Room[]
+}
+
+model RoomType {
+  id          Int      @id @default(autoincrement())
+  name        String   @unique
+  base_price  Float
+  capacity    Int
+  description String
+  created_at  DateTime @default(now())
+  rooms       Room[]
+}
+
+model Room {
+  id              Int               @id @default(autoincrement())
+  room_number     String            @unique
+  room_type_id    Int
+  floor           Int
+  status          String
+  current_price   Float
+  availability    Boolean
+  last_updated    DateTime          @default(now())
+  hotel_id        Int?
+  hotel           Hotel?            @relation(fields: [hotel_id], references: [id])
+  room_type       RoomType          @relation(fields: [room_type_id], references: [id])
+  bookings        Booking[]
+  channelInventory ChannelInventory[]
+  pricingHistory  PricingHistory[]
+}
+
+model Channel {
+  id           Int               @id @default(autoincrement())
+  channel_name String            @unique
+  api_status   String
+  connected    Boolean           @default(true)
+  last_sync    DateTime          @default(now())
+  sync_speed   String
+  created_at   DateTime          @default(now())
+  inventory    ChannelInventory[]
+}
+
+model ChannelInventory {
+  id          Int      @id @default(autoincrement())
+  channel_id  Int
+  room_id     Int
+  available   Boolean
+  price       Float
+  last_synced DateTime @default(now())
+  channel     Channel  @relation(fields: [channel_id], references: [id])
+  room        Room     @relation(fields: [room_id], references: [id])
+
+  @@unique([channel_id, room_id])
+}
+
+model Booking {
+  id             Int      @id @default(autoincrement())
+  booking_number String   @unique
+  room_id        Int
+  booking_source String
+  guest_name     String
+  check_in       DateTime
+  check_out      DateTime
+  booking_status String
+  created_at     DateTime @default(now())
+  room           Room     @relation(fields: [room_id], references: [id])
+}
+
+model PricingRule {
+  id               Int      @id @default(autoincrement())
+  rule_name        String
+  rule_description String?
+  rule_type        String
+  condition        String
+  comparison       String
+  value            Float
+  action           String
+  percentage       Float
+  priority         Int      @default(1)
+  enabled          Boolean  @default(true)
+  scope            String? 
+  created_at       DateTime @default(now())
+}
+
+model PricingHistory {
+  id           Int      @id @default(autoincrement())
+  room_id      Int
+  old_price    Float
+  new_price    Float
+  difference   Float
+  reason       String
+  triggered_by String
+  created_at   DateTime @default(now())
+  room         Room     @relation(fields: [room_id], references: [id])
+}
+
+model SyncLog {
+  id            Int      @id @default(autoincrement())
+  channel       String
+  room          String
+  action        String
+  status        String
+  response_time String
+  message       String
+  created_at    DateTime @default(now())
+}
+
+model OccupancyHistory {
+  id                   Int      @id @default(autoincrement())
+  date                 String
+  room_type            String
+  occupancy_percentage Float
+  total_rooms          Int
+  occupied_rooms       Int
+  created_at           DateTime @default(now())
+}
+
+model Statistics {
+  id                  Int      @id @default(autoincrement())
+  date                String
+  total_rooms         Int
+  occupied_rooms      Int
+  available_rooms     Int
+  connected_channels  Int
+  active_bookings     Int
+  average_occupancy   Float
+  average_sync_time   Float
+  pricing_rules_enabled Int
+  created_at          DateTime @default(now())
+}
+
+model User {
+  id         Int      @id @default(autoincrement())
+  name       String
+  email      String   @unique
+  phone      String?
+  password   String
+  role       String   @default("receptionist")
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+}
+
+model Guest {
+  id              Int           @id @default(autoincrement())
+  firstName       String
+  lastName        String
+  email           String?
+  phone           String?
+  idType          String?
+  idNumber        String?
+  loyaltyPoints   Int           @default(0)
+  specialRequests String?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  reservations    Reservation[]
+}
+
+model Reservation {
+  id           Int       @id @default(autoincrement())
+  guestId      Int?
+  roomId       Int?
+  checkIn      DateTime
+  checkOut     DateTime
+  status       String    @default("confirmed")
+  totalCharges Float?
+  paidAmount   Float?
+  notes        String?
+  source       String?
+  verificationStatus String @default("UNVERIFIED")
+  dlImageUrl   String?
+  selfieImageUrl String?
+  digitalPin   String?
+  digitalKey   String?
+  digitalKeyStatus String @default("INACTIVE")
+  lockId       String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  guest        Guest?    @relation(fields: [guestId], references: [id])
+  payments     Payment[]
+}
+
+model Payment {
+  id            Int          @id @default(autoincrement())
+  reservationId Int?
+  amount        Float
+  method        String       @default("Cash")
+  paymentStatus String       @default("Pending")
+  notes         String?
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+  reservation   Reservation? @relation(fields: [reservationId], references: [id])
+}
+
+model Vehicle {
+  id          Int      @id @default(autoincrement())
+  make        String
+  model       String
+  licensePlate String
+  state       String
+  parkingSlot String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model CashLedger {
+  id           Int      @id @default(autoincrement())
+  employeeName String
+  openingCash  Float    @default(0)
+  closingCash  Float    @default(0)
+  status       String   @default("open")
+  notes        String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model ShiftAudit {
+  id           Int      @id @default(autoincrement())
+  employeeName String
+  openingCash  Float    @default(0)
+  closingCash  Float    @default(0)
+  status       String   @default("open")
+  notes        String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model Housekeeping {
+  id          Int      @id @default(autoincrement())
+  roomId      Int?
+  status      String   @default("pending")
+  assignedTo  String?
+  notes       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Maintenance {
+  id          Int      @id @default(autoincrement())
+  roomId      Int?
+  issue       String
+  priority    String   @default("normal")
+  status      String   @default("open")
+  notes       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model AppNotification {
+  id        Int      @id @default(autoincrement())
+  type      String   @default("system")
+  title     String
+  message   String
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+}
+
