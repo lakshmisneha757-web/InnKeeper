@@ -10,11 +10,12 @@ function paginate(data, page, limit) {
 
 export async function listRoomsNew(req, res) {
   try {
-    const { page = 1, limit = 50, q = '' } = req.query;
+    const { page = 1, limit = 200, q = '' } = req.query;
     const rooms = await prisma.room.findMany({
       include: { room_type: true, channelInventory: true },
-      orderBy: { room_number: 'asc' }
     });
+
+    rooms.sort((a, b) => (parseInt(a.room_number, 10) || 0) - (parseInt(b.room_number, 10) || 0));
     const filtered = q
       ? rooms.filter(r => r.room_number.includes(q) || r.room_type?.name?.toLowerCase().includes(q.toLowerCase()))
       : rooms;
@@ -72,8 +73,9 @@ export async function createRoomNew(req, res) {
 export async function updateRoomNew(req, res) {
   try {
     const { status, rate, isAvailable, floor } = req.body;
+    const roomId = Number(req.params.id);
     const room = await prisma.room.update({
-      where: { id: Number(req.params.id) },
+      where: { id: roomId },
       data: {
         ...(status && { status }),
         ...(rate !== undefined && { current_price: rate }),
@@ -82,6 +84,38 @@ export async function updateRoomNew(req, res) {
         last_updated: new Date()
       }
     });
+
+    if (status) {
+      const st = String(status).toLowerCase();
+      if (st === 'dirty' || st === 'vacant' || st === 'clean' || st === 'maintenance' || st === 'under_maintenance' || st === 'out_of_service') {
+        const activeRes = await prisma.reservation.findMany({
+          where: {
+            roomId: roomId,
+            status: { in: ['checked_in', 'CHECKED_IN'] }
+          }
+        });
+        for (const r of activeRes) {
+          await prisma.reservation.update({
+            where: { id: r.id },
+            data: { status: 'checked_out', digitalKeyStatus: 'EXPIRED' }
+          });
+        }
+      } else if (st === 'occupied') {
+        const confirmedRes = await prisma.reservation.findMany({
+          where: {
+            roomId: roomId,
+            status: { in: ['confirmed', 'CONFIRMED'] }
+          }
+        });
+        for (const r of confirmedRes) {
+          await prisma.reservation.update({
+            where: { id: r.id },
+            data: { status: 'checked_in', verificationStatus: 'VERIFIED' }
+          });
+        }
+      }
+    }
+
     res.json(room);
   } catch (err) {
     res.status(500).json({ error: err.message });

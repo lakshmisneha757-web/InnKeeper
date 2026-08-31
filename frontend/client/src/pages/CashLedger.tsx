@@ -12,15 +12,20 @@ import { Form, FormItem, FormLabel, FormControl } from "@/components/ui/form";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { ledgerFormSchema, LedgerForm } from "@/lib/module5Schemas";
+import { useTranslation } from "react-i18next";
 
-export default function CashLedgerPage(){
-  const [search,setSearch]=useState("");
+export default function CashLedgerPage() {
+  const { t } = useTranslation();
+  const [search, setSearch] = useState("");
+  const [page, setPage] = useState(1);
+  const itemsPerPage = 10;
   const qc = useQueryClient();
 
-  const q = useQuery({ queryKey:["cash-ledger",search], queryFn: async ()=>{ const { data } = await apiClient.cashLedger.list({ limit: 50, q: search }); return normalizeListResponse<any>(data); } });
+  const q = useQuery({ queryKey:["cash-ledger",search, page], queryFn: async ()=>{ const { data } = await apiClient.cashLedger.list({ limit: 50, q: search }); return normalizeListResponse<any>(data); } });
+  const items = q.data?.items ?? [];
+  const totalPages = Math.ceil(items.length / itemsPerPage) || 1;
 
   const openShift = useMutation({ mutationFn: (payload:any)=>apiClient.cashLedger.create(payload), onSuccess: ()=>{qc.invalidateQueries({ queryKey: ["cash-ledger"] }); qc.invalidateQueries({ queryKey: ["dashboard"] }); toast.success("Shift opened");}, onError: (err:any)=>{ const msg = err?.response?.data?.error ?? err?.message ?? "Failed"; toast.error(String(msg)); } });
-
 
   const updateShift = useMutation({ mutationFn: ({ id, data }:any) => apiClient.cashLedger.update(id, data), onSuccess: ()=>{qc.invalidateQueries({ queryKey: ["cash-ledger"] }); toast.success("Shift updated");}, onError: (err:any)=>{ const msg = err?.response?.data?.error ?? err?.message ?? "Failed"; toast.error(String(msg)); } });
 
@@ -48,11 +53,11 @@ export default function CashLedgerPage(){
     <div className="space-y-6">
       <Card>
         <CardHeader className="flex items-center justify-between">
-          <CardTitle>Cash Ledger</CardTitle>
+          <CardTitle>{t("cashLedger.title")}</CardTitle>
           <div className="flex items-center gap-2">
-            <Input placeholder="Search ledger" value={search} onChange={(e:any)=>setSearch(e.target.value)} />
-            <Button onClick={handleOpen}>Open Shift</Button>
-            <Button variant="outline" onClick={handleExport}>Export CSV</Button>
+            <Input placeholder={t("cashLedger.searchPlaceholder")} value={search} onChange={(e:any)=>setSearch(e.target.value)} />
+            <Button onClick={handleOpen} className="cursor-pointer">{t("cashLedger.openShift")}</Button>
+            <Button variant="outline" onClick={handleExport} className="cursor-pointer">Export CSV</Button>
           </div>
         </CardHeader>
         <CardContent>
@@ -60,64 +65,87 @@ export default function CashLedgerPage(){
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Employee</TableHead>
-                  <TableHead>Opening</TableHead>
-                  <TableHead>Closing</TableHead>
-                  <TableHead>Expected</TableHead>
-                  <TableHead>Actual</TableHead>
+                  <TableHead>{t("cashLedger.employee")}</TableHead>
+                  <TableHead>{t("cashLedger.opening")}</TableHead>
+                  <TableHead>{t("cashLedger.closing")}</TableHead>
+                  <TableHead>{t("cashLedger.expected")}</TableHead>
+                  <TableHead>{t("cashLedger.actual")}</TableHead>
+                  <TableHead>{t("common.actions")}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {(q.data?.items ?? []).map((r:any)=> (
+                {items.slice((page - 1) * itemsPerPage, page * itemsPerPage).map((r:any)=> (
                   <TableRow key={r.id}>
-                    <TableCell>{r.employeeName}</TableCell>
-                    <TableCell>{r.openingCash}</TableCell>
-                    <TableCell>{r.closingCash}</TableCell>
-                    <TableCell>{r.expectedCash}</TableCell>
-                    <TableCell>{r.actualCash}</TableCell>
+                    <TableCell className="font-semibold">{r.employeeName}</TableCell>
+                    <TableCell>₹{r.openingCash}</TableCell>
+                    <TableCell>₹{r.closingCash}</TableCell>
+                    <TableCell>₹{r.expectedCash}</TableCell>
+                    <TableCell>₹{r.actualCash}</TableCell>
                     <TableCell className="flex gap-2">
-                      <Button size="sm" onClick={()=>{ setEditing(r); form.reset({ employeeName: r.employeeName, openingCash: r.openingCash ?? 0, closingCash: r.closingCash ?? 0, status: r.status ?? "open", notes: r.notes ?? "" }); setDialogOpen(true); }}>Edit</Button>
-                      <Button size="sm" variant="destructive" onClick={()=>{ if(!window.confirm("Delete ledger entry?")) return; deleteShift.mutate(r.id); }}>Delete</Button>
+                      <Button size="sm" className="cursor-pointer" onClick={()=>{ setEditing(r); form.reset({ employeeName: r.employeeName, openingCash: r.openingCash ?? 0, closingCash: r.closingCash ?? 0, status: r.status ?? "open", notes: r.notes ?? "" }); setDialogOpen(true); }}>{t("common.edit")}</Button>
+                      <Button size="sm" variant="destructive" className="cursor-pointer" onClick={()=>{ if(!window.confirm("Delete ledger entry?")) return; deleteShift.mutate(r.id); }}>{t("common.delete")}</Button>
                     </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
             </Table>
           </div>
+
+          {/* Pagination Controls */}
+          <div className="flex items-center justify-between mt-4 text-sm text-muted-foreground">
+            <span>Showing {Math.min(items.length, (page - 1) * itemsPerPage + 1)} - {Math.min(items.length, page * itemsPerPage)} of {items.length} shift entries</span>
+            <div className="flex items-center gap-2">
+              <Button size="sm" variant="outline" onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}>{t("common.previous")}</Button>
+              <span className="text-xs font-bold text-foreground">Page {page} of {totalPages}</span>
+              <Button size="sm" variant="outline" onClick={() => setPage(p => p + 1)} disabled={page >= totalPages}>{t("common.next")}</Button>
+            </div>
+          </div>
         </CardContent>
       </Card>
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent>
+        <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>{editing ? "Edit Shift" : "Open Shift"}</DialogTitle>
+            <DialogTitle className="text-2xl font-bold text-slate-900">{editing ? t("cashLedger.editShift") : t("cashLedger.openShift")}</DialogTitle>
           </DialogHeader>
           <Form {...form}>
             <form onSubmit={form.handleSubmit((values)=>{
+              if (!values.employeeName || !values.employeeName.trim()) {
+                toast.error("Employee Name is required");
+                return;
+              }
               if (editing) {
                 updateShift.mutate({ id: editing.id, data: values });
               } else {
                 openShift.mutate(values);
               }
               setDialogOpen(false);
-            })}>
-              <div className="grid gap-2">
-                <FormItem>
-                  <FormLabel>Employee</FormLabel>
-                  <FormControl>
-                    <Input {...form.register("employeeName")} />
-                  </FormControl>
-                </FormItem>
-                <FormItem>
-                  <FormLabel>Opening Cash</FormLabel>
-                  <FormControl>
-                    <Input type="number" {...form.register("openingCash", { valueAsNumber: true })} />
-                  </FormControl>
-                </FormItem>
-                <div className="flex gap-2 justify-end">
-                  <Button type="button" variant="outline" onClick={()=>setDialogOpen(false)}>Cancel</Button>
-                  <Button type="submit">Save</Button>
-                </div>
+            })} className="space-y-4 pt-2">
+              <FormItem>
+                <FormLabel className="font-semibold text-slate-800">{t("cashLedger.employeeName")}</FormLabel>
+                <FormControl>
+                  <Input placeholder="e.g. John Doe" required {...form.register("employeeName", { required: true })} />
+                </FormControl>
+              </FormItem>
+              <FormItem>
+                <FormLabel className="font-semibold text-slate-800">{t("cashLedger.openingCash")}</FormLabel>
+                <FormControl>
+                  <Input type="number" placeholder="0.00" required {...form.register("openingCash", { valueAsNumber: true })} />
+                </FormControl>
+              </FormItem>
+              <FormItem>
+                <FormLabel className="font-semibold text-slate-800">{t("cashLedger.notes")}</FormLabel>
+                <FormControl>
+                  <Input placeholder="Shift notes..." {...form.register("notes")} />
+                </FormControl>
+              </FormItem>
+              <div className="flex gap-3 justify-end pt-4">
+                <Button type="button" variant="outline" className="h-11 rounded-2xl border-slate-200 bg-white hover:bg-slate-50 text-slate-700 font-medium px-6 shadow-2xs cursor-pointer" onClick={()=>setDialogOpen(false)}>
+                  {t("common.cancel")}
+                </Button>
+                <Button type="submit" className="h-11 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white font-semibold px-6 shadow-md shadow-blue-500/20" disabled={openShift.isPending || updateShift.isPending}>
+                  {openShift.isPending || updateShift.isPending ? t("common.saving") : t("cashLedger.saveShift")}
+                </Button>
               </div>
             </form>
           </Form>
@@ -126,3 +154,4 @@ export default function CashLedgerPage(){
     </div>
   );
 }
+

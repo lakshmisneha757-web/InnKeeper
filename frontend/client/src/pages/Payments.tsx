@@ -14,7 +14,10 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { paymentFormSchema, PaymentForm } from "@/lib/module5Schemas";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
+import { useTranslation } from "react-i18next";
+
 export default function PaymentsPage() {
+  const { t } = useTranslation();
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const qc = useQueryClient();
@@ -85,11 +88,10 @@ export default function PaymentsPage() {
     <div className="space-y-6">
       <Card>
         <CardHeader className="flex items-center justify-between">
-          <CardTitle>Payments</CardTitle>
+          <CardTitle>{t("payments.title")}</CardTitle>
           <div className="flex items-center gap-2">
-            <Input placeholder="Search payments" value={search} onChange={(e:any)=>setSearch(e.target.value)} />
-            <Button onClick={handleCreate}>New</Button>
-            <Button variant="outline" onClick={handleExport}>Export CSV</Button>
+            <Input placeholder={t("payments.searchPlaceholder")} value={search} onChange={(e:any)=>setSearch(e.target.value)} />
+            <Button variant="outline" onClick={handleExport} className="cursor-pointer">Export CSV</Button>
           </div>
         </CardHeader>
         <CardContent>
@@ -97,120 +99,50 @@ export default function PaymentsPage() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Payment ID</TableHead>
-                  <TableHead>Reservation</TableHead>
-                  <TableHead>Guest</TableHead>
-                  <TableHead>Room ID</TableHead>
-                  <TableHead>Amount</TableHead>
-                  <TableHead>Payment Method</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Recorded Date</TableHead>
+                  <TableHead>{t("payments.paymentId")}</TableHead>
+                  <TableHead>{t("payments.reservationId")}</TableHead>
+                  <TableHead>{t("payments.guest")}</TableHead>
+                  <TableHead>{t("reservations.roomNumber")}</TableHead>
+                  <TableHead>{t("payments.amount")}</TableHead>
+                  <TableHead>{t("payments.method")}</TableHead>
+                  <TableHead>{t("payments.status")}</TableHead>
+                  <TableHead>{t("payments.date")}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {(paymentsQ.data?.items ?? []).map((p:any)=> (
-                  <TableRow key={p.id}>
-                    <TableCell>{p.id}</TableCell>
-                    <TableCell>{p.reservationId ?? "—"}</TableCell>
-                    <TableCell>{p.guest ?? p.guestId ?? "—"}</TableCell>
-                    <TableCell>{p.roomId ?? "—"}</TableCell>
-                    <TableCell>₹{p.amount}</TableCell>
-                    <TableCell>{p.method ?? "—"}</TableCell>
-                    <TableCell>{p.status ?? p.paymentStatus ?? "—"}</TableCell>
-                    <TableCell>{new Date(p.createdAt).toLocaleString()}</TableCell>
-                    <TableCell className="flex gap-2">
-                      <Button size="sm" onClick={()=>{ setEditing(p); form.reset({ reservationId: p.reservationId ?? "", amount: p.amount ?? 0, method: p.method ?? "Credit Card", paymentStatus: p.status ?? p.paymentStatus ?? "Pending", notes: p.notes ?? "" }); setDialogOpen(true); }}>Edit</Button>
-                      <Button size="sm" variant="destructive" onClick={()=>{ if(!window.confirm("Delete payment?")) return; deleteMutation.mutate(p.id); }}>Delete</Button>
-                    </TableCell>
-                  </TableRow>
-                ))}
+                {(paymentsQ.data?.items ?? []).map((p: any, idx: number) => {
+                  const rawGuest = p.reservation?.guest ? `${p.reservation.guest.firstName} ${p.reservation.guest.lastName}`.trim() : (typeof p.guest === "string" && p.guest !== "Unknown Guest" && p.guest !== "—" ? p.guest : null);
+                  const statusStr = (p.status ?? p.paymentStatus ?? "").toString().toLowerCase();
+                  const isCompletedOrPaid = statusStr === "completed" || statusStr === "paid";
+                  const displayGuest = isCompletedOrPaid && rawGuest ? rawGuest : "—";
+                  const displayStatus = isCompletedOrPaid ? "Paid" : (p.status ?? p.paymentStatus ?? "—");
+
+                  const totalItems = paymentsQ.data?.items?.length || 1;
+                  const displayPayId = `PAY-${String(totalItems - idx).padStart(4, '0')}`;
+                  const displayResId = p.reservationId ? `RES-${String(p.reservationId).padStart(4, '0')}` : "—";
+
+                  return (
+                    <TableRow key={p.id}>
+                      <TableCell className="font-mono text-xs font-bold text-foreground">{displayPayId}</TableCell>
+                      <TableCell className="font-mono text-xs text-muted-foreground">{displayResId}</TableCell>
+                      <TableCell className="font-medium">{displayGuest}</TableCell>
+                      <TableCell className="font-semibold">{p.roomId || p.reservation?.roomId || "—"}</TableCell>
+                      <TableCell className="font-semibold text-foreground">₹{(p.amount ?? 0).toLocaleString()}</TableCell>
+                      <TableCell>{p.method ?? "—"}</TableCell>
+                      <TableCell>
+                        <span className="inline-flex items-center rounded-full bg-emerald-500/10 px-2.5 py-0.5 text-xs font-medium text-emerald-600 border border-emerald-500/20">
+                          {displayStatus}
+                        </span>
+                      </TableCell>
+                      <TableCell className="text-xs text-muted-foreground">{p.createdAt ? new Date(p.createdAt).toLocaleString() : "—"}</TableCell>
+                    </TableRow>
+                  );
+                })}
               </TableBody>
             </Table>
           </div>
         </CardContent>
       </Card>
-
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{editing ? "Edit Payment" : "New Payment"}</DialogTitle>
-          </DialogHeader>
-          <Form {...form}>
-            <form onSubmit={form.handleSubmit((values)=>{
-              const payload = {
-                reservationId: values.reservationId,
-                amount: values.amount,
-                method: values.method,
-                status: values.paymentStatus,
-                notes: values.notes,
-              };
-              if (editing) updateMutation.mutate({ id: editing.id, data: payload }); else createMutation.mutate(payload);
-              setDialogOpen(false);
-            })}>
-              <div className="grid gap-2">
-                <FormItem>
-                  <FormLabel>Reservation ID</FormLabel>
-                  <FormControl>
-                    <Input {...form.register("reservationId")} />
-                  </FormControl>
-                </FormItem>
-                <FormItem>
-                  <FormLabel>Amount</FormLabel>
-                  <FormControl>
-                    <Input type="number" {...form.register("amount", { valueAsNumber: true })} />
-                  </FormControl>
-                </FormItem>
-                <FormItem>
-                  <FormLabel>Payment Method</FormLabel>
-                  <FormControl>
-                    <Select value={form.watch("method") ?? "Credit Card"} onValueChange={(value) => form.setValue("method", value)}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select method" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {[
-                          "Cash",
-                          "Credit Card",
-                          "Debit Card",
-                          "UPI",
-                          "Wallet",
-                          "Bank Transfer",
-                        ].map((option) => (
-                          <SelectItem key={option} value={option}>{option}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </FormControl>
-                </FormItem>
-                <FormItem>
-                  <FormLabel>Status</FormLabel>
-                  <FormControl>
-                    <Select value={form.watch("paymentStatus") ?? "Pending"} onValueChange={(value) => form.setValue("paymentStatus", value)}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select status" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {[
-                          "Pending",
-                          "Paid",
-                          "Failed",
-                          "Refunded",
-                        ].map((option) => (
-                          <SelectItem key={option} value={option}>{option}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </FormControl>
-                </FormItem>
-                <div className="flex gap-2 justify-end">
-                  <Button type="button" variant="outline" onClick={()=>setDialogOpen(false)}>Cancel</Button>
-                  <Button type="submit">Save</Button>
-                </div>
-              </div>
-            </form>
-          </Form>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

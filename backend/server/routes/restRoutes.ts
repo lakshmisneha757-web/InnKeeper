@@ -1,4 +1,4 @@
-import { Router } from "express";
+import { Router, Request, Response, NextFunction } from "express";
 import { z } from "zod";
 import { hasDatabaseConfig, prisma } from "../prisma/client";
 import { authenticateJwt, requireRole } from "../middleware/auth";
@@ -139,14 +139,12 @@ function buildSearchFilter(q?: string) {
   if (!q) return undefined;
   return {
     OR: [
-      { number: { contains: q, mode: "insensitive" as const } },
-      { name: { contains: q, mode: "insensitive" as const } },
-      { type: { contains: q, mode: "insensitive" as const } },
+      { room_number: { contains: q, mode: "insensitive" as const } },
     ],
   };
 }
 
-function parsePagination(req: any) {
+function parsePagination(req: Request) {
   const parsed = paginationSchema.safeParse(req.query);
   if (!parsed.success) return paginationSchema.parse({});
   return parsed.data;
@@ -167,17 +165,31 @@ async function withDatabase<T>(operation: () => Promise<T>, fallback: T) {
   }
 }
 
-router.get("/rooms", async (req, res, next) => {
+router.get("/rooms", async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { page, limit, sortBy, sortOrder, q } = parsePagination(req);
     const payload = await withDatabase(async () => {
       const skip = (page - 1) * limit;
       const where = buildSearchFilter(q) ?? {};
       const [items, total] = await Promise.all([
-        prisma.room.findMany({ where, skip, take: limit, orderBy: buildSort(sortBy, sortOrder) ?? { number: "asc" } }),
+        prisma.room.findMany({ where, skip, take: limit, orderBy: buildSort(sortBy, sortOrder) ?? { room_number: "asc" }, include: { room_type: true } }),
         prisma.room.count({ where }),
       ]);
-      return { items, page, limit, total, pages: Math.ceil(total / limit) };
+      const normalizedItems = items.map((r: any) => ({
+        id: r.id,
+        number: r.room_number,
+        name: `Room ${r.room_number}`,
+        type: r.room_type?.name?.toLowerCase() || "standard",
+        floor: r.floor,
+        status: r.status?.toLowerCase() || "vacant",
+        rate: r.current_price,
+        capacity: r.room_type?.capacity || 2,
+        amenities: r.room_type?.description || null,
+        isAvailable: r.availability ? 1 : 0,
+        createdAt: r.last_updated,
+        updatedAt: r.last_updated,
+      }));
+      return { items: normalizedItems, page, limit, total, pages: Math.ceil(total / limit) };
     }, { items: [], page, limit, total: 0, pages: 0 });
     res.json(payload);
   } catch (error) {
@@ -185,53 +197,81 @@ router.get("/rooms", async (req, res, next) => {
   }
 });
 
-router.get("/rooms/:id", async (req, res, next) => {
+router.get("/rooms/:id", async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const room = await prisma.room.findUnique({ where: { id: req.params.id } });
+    const id = Number(Array.isArray(req.params.id) ? req.params.id[0] : req.params.id);
+    const room = await prisma.room.findUnique({ where: { id }, include: { room_type: true } });
     if (!room) return res.status(404).json({ error: "Room not found" });
-    res.json(room);
+    res.json({
+      ...room,
+      number: room.room_number,
+      type: room.room_type?.name?.toLowerCase() || "standard",
+    });
   } catch (error) {
     next(error);
   }
 });
 
-router.post("/rooms", async (req, res, next) => {
+router.post("/rooms", async (req: Request, res: Response, next: NextFunction) => {
   try {
     const payload = roomSchema.parse(req.body);
-    const room = await prisma.room.create({ data: payload });
+    let roomType = await prisma.roomType.findFirst({ where: { name: { contains: payload.type, mode: "insensitive" } } });
+    if (!roomType) {
+      roomType = await prisma.roomType.create({ data: { name: payload.type || "Standard", base_price: payload.rate || 100, capacity: 2, description: "" } });
+    }
+    const room = await prisma.room.create({
+      data: {
+        room_number: payload.number,
+        floor: payload.floor,
+        status: payload.status,
+        current_price: payload.rate,
+        availability: payload.status === "vacant",
+        room_type_id: roomType.id,
+      },
+    });
     res.status(201).json(room);
   } catch (error) {
     next(error);
   }
 });
 
-router.put("/rooms/:id", async (req, res, next) => { 
+router.put("/rooms/:id", async (req: Request, res: Response, next: NextFunction) => { 
    try {
+    const id = Number(Array.isArray(req.params.id) ? req.params.id[0] : req.params.id);
     const payload = roomSchema.partial().parse(req.body);
-    const room = await prisma.room.update({ where: { id: req.params.id }, data: payload });
+    const room = await prisma.room.update({
+      where: { id },
+      data: {
+        ...(payload.number ? { room_number: payload.number } : {}),
+        ...(payload.floor !== undefined ? { floor: payload.floor } : {}),
+        ...(payload.status ? { status: payload.status, availability: payload.status === "vacant" } : {}),
+        ...(payload.rate !== undefined ? { current_price: payload.rate } : {}),
+      },
+    });
     res.json(room);
   } catch (error) {
     next(error);
   }
 });
 
-router.delete("/rooms/:id", async (req, res, next) => {
+router.delete("/rooms/:id", async (req: Request, res: Response, next: NextFunction) => {
   try {
-    await prisma.room.delete({ where: { id: req.params.id } });
+    const id = Number(Array.isArray(req.params.id) ? req.params.id[0] : req.params.id);
+    await prisma.room.delete({ where: { id } });
     res.status(204).send();
   } catch (error) {
     next(error);
   }
 });
 
-router.get("/reservations", async (req, res, next) => {
+router.get("/reservations", async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { page, limit, sortBy, sortOrder, q } = parsePagination(req);
     const payload = await withDatabase(async () => {
       const skip = (page - 1) * limit;
-      const where = q ? { OR: [{ roomNumber: { contains: q, mode: "insensitive" as const } }, { status: { contains: q, mode: "insensitive" as const } }] } : {};
+      const where = q ? { OR: [{ status: { contains: q, mode: "insensitive" as const } }] } : {};
       const [items, total] = await Promise.all([
-        prisma.reservation.findMany({ where, skip, take: limit, orderBy: buildSort(sortBy, sortOrder) ?? { checkIn: "asc" } }),
+        prisma.reservation.findMany({ where, skip, take: limit, orderBy: buildSort(sortBy, sortOrder) ?? { id: "desc" } }),
         prisma.reservation.count({ where }),
       ]);
       return { items, page, limit, total, pages: Math.ceil(total / limit) };
@@ -242,40 +282,39 @@ router.get("/reservations", async (req, res, next) => {
   }
 });
 
-router.post("/rooms", async (req, res, next) => {
+router.put("/reservations/:id", async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const payload = roomSchema.parse(req.body);
-
-    const room = await prisma.room.create({
-      data: payload,
-    });
-
-    res.status(201).json(room);
-  } catch (error) {
-    next(error);
-  }
-});
-
-router.put("/reservations/:id", async (req, res, next) => {
-  try {
+    const id = Number(Array.isArray(req.params.id) ? req.params.id[0] : req.params.id);
     const payload = reservationSchema.partial().parse(req.body);
-    const reservation = await prisma.reservation.update({ where: { id: req.params.id }, data: { ...payload, checkIn: payload.checkIn ? new Date(payload.checkIn) : undefined, checkOut: payload.checkOut ? new Date(payload.checkOut) : undefined } });
+    const reservation = await prisma.reservation.update({
+      where: { id },
+      data: {
+        ...(payload.status ? { status: payload.status } : {}),
+        ...(payload.totalCharges !== undefined ? { totalCharges: payload.totalCharges } : {}),
+        ...(payload.specialNotes !== undefined ? { notes: payload.specialNotes } : {}),
+        ...(payload.guestId ? { guestId: Number(payload.guestId) } : {}),
+        ...(payload.roomId ? { roomId: Number(payload.roomId) } : {}),
+        ...(payload.checkIn ? { checkIn: new Date(payload.checkIn) } : {}),
+        ...(payload.checkOut ? { checkOut: new Date(payload.checkOut) } : {}),
+      },
+    });
     res.json(reservation);
   } catch (error) {
     next(error);
   }
 });
 
-router.delete("/reservations/:id", async (req, res, next) => {
+router.delete("/reservations/:id", async (req: Request, res: Response, next: NextFunction) => {
   try {
-    await prisma.reservation.delete({ where: { id: req.params.id } });
+    const id = Number(Array.isArray(req.params.id) ? req.params.id[0] : req.params.id);
+    await prisma.reservation.delete({ where: { id } });
     res.status(204).send();
   } catch (error) {
     next(error);
   }
 });
 
-router.get("/guests", async (req, res, next) => {
+router.get("/guests", async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { page, limit, sortBy, sortOrder, q } = parsePagination(req);
     const payload = await withDatabase(async () => {
@@ -293,7 +332,7 @@ router.get("/guests", async (req, res, next) => {
   }
 });
 
-router.post("/guests", async (req, res, next) => {
+router.post("/guests", async (req: Request, res: Response, next: NextFunction) => {
   try {
     const payload = guestSchema.parse(req.body);
     const guest = await prisma.guest.create({ data: payload });
@@ -303,31 +342,34 @@ router.post("/guests", async (req, res, next) => {
   }
 });
 
-router.put("/guests/:id", async (req, res, next) => {
+router.put("/guests/:id", async (req: Request, res: Response, next: NextFunction) => {
   try {
+    const id = Number(Array.isArray(req.params.id) ? req.params.id[0] : req.params.id);
     const payload = guestSchema.partial().parse(req.body);
-    const guest = await prisma.guest.update({ where: { id: req.params.id }, data: payload });
+    const guest = await prisma.guest.update({ where: { id }, data: payload });
     res.json(guest);
   } catch (error) {
     next(error);
   }
 });
 
-router.delete("/guests/:id", async (req, res, next) => {
+router.delete("/guests/:id", async (req: Request, res: Response, next: NextFunction) => {
   try {
-    await prisma.guest.delete({ where: { id: req.params.id } });
+    const id = Number(Array.isArray(req.params.id) ? req.params.id[0] : req.params.id);
+    await prisma.guest.delete({ where: { id } });
     res.status(204).send();
   } catch (error) {
     next(error);
   }
 });
 
-router.get("/payments", async (req, res, next) => {
+router.get("/payments", async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { page, limit, sortBy, sortOrder, q } = parsePagination(req);
     const payload = await withDatabase(async () => {
       const skip = (page - 1) * limit;
-      const where = q ? { OR: [{ status: { contains: q, mode: "insensitive" as const } }, { method: { contains: q, mode: "insensitive" as const } }, { reservationId: { contains: q, mode: "insensitive" as const } }] } : {};
+      const parsedResId = q && !isNaN(Number(q)) ? Number(q) : undefined;
+      const where = q ? { OR: [{ paymentStatus: { contains: q, mode: "insensitive" as const } }, { method: { contains: q, mode: "insensitive" as const } }, ...(parsedResId !== undefined ? [{ reservationId: parsedResId }] : [])] } : {};
       const [items, total] = await Promise.all([
         prisma.payment.findMany({
           where,
@@ -338,23 +380,15 @@ router.get("/payments", async (req, res, next) => {
         }),
         prisma.payment.count({ where }),
       ]);
-      const enrichedItems = items.map((payment) => {
-        const guestName = payment.reservation?.guest ? `${payment.reservation.guest.firstName} ${payment.reservation.guest.lastName}`.trim() : "Unknown Guest";
+      const enrichedItems = items.map((payment: any) => {
+        const guestName = payment.reservation?.guest ? `${payment.reservation.guest.firstName} ${payment.reservation.guest.lastName}`.trim() : (payment.notes?.includes("Holder:") ? payment.notes.split("Holder:")[1]?.split("|")[0]?.trim() : "—");
+        const status = payment.paymentStatus || "Paid";
         return {
           ...payment,
-          ...buildPaymentRecord({
-            reservationId: payment.reservationId,
-            amount: payment.amount,
-            method: payment.method,
-            status: payment.status,
-            reservation: {
-              id: payment.reservationId,
-              guest: payment.reservation?.guest,
-              roomId: payment.reservation?.roomId,
-            },
-          }),
+          status,
+          paymentStatus: status,
           guest: guestName,
-          roomId: payment.reservation?.roomId ?? "",
+          roomId: payment.reservation?.roomId ?? "—",
         };
       });
       return { items: enrichedItems, page, limit, total, pages: Math.ceil(total / limit) };
@@ -365,9 +399,10 @@ router.get("/payments", async (req, res, next) => {
   }
 });
 
-router.get("/payments/:id", async (req, res, next) => {
+router.get("/payments/:id", async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const payment = await prisma.payment.findUnique({ where: { id: req.params.id }, include: { reservation: { include: { guest: true } } } });
+    const id = Number(Array.isArray(req.params.id) ? req.params.id[0] : req.params.id);
+    const payment = await prisma.payment.findUnique({ where: { id }, include: { reservation: { include: { guest: true } } } });
     if (!payment) return res.status(404).json({ error: "Payment not found" });
     const guestName = payment.reservation?.guest ? `${payment.reservation.guest.firstName} ${payment.reservation.guest.lastName}`.trim() : "Unknown Guest";
     res.json({
@@ -376,7 +411,7 @@ router.get("/payments/:id", async (req, res, next) => {
         reservationId: payment.reservationId,
         amount: payment.amount,
         method: payment.method,
-        status: payment.status,
+        status: payment.paymentStatus,
         reservation: {
           id: payment.reservationId,
           guest: payment.reservation?.guest,
@@ -391,28 +426,31 @@ router.get("/payments/:id", async (req, res, next) => {
   }
 });
 
-router.post("/payments", async (req, res, next) => {
+router.post("/payments", async (req: Request, res: Response, next: NextFunction) => {
   try {
     const payload = paymentSchema.parse(req.body);
-    const reservation = await prisma.reservation.findUnique({
-      where: { id: payload.reservationId },
-      include: { guest: true },
-    });
+    const reservationIdNum = payload.reservationId ? Number(payload.reservationId) : undefined;
+    const reservation = reservationIdNum
+      ? await prisma.reservation.findUnique({
+          where: { id: reservationIdNum },
+          include: { guest: true },
+        })
+      : null;
 
-    if (!reservation) {
+    if (payload.reservationId && !reservation) {
       return res.status(404).json({ error: "Reservation not found" });
     }
 
-    const guestName = reservation.guest ? `${reservation.guest.firstName} ${reservation.guest.lastName}`.trim() : "Unknown Guest";
-    const normalizedStatus = normalizePaymentStatus(payload.status ?? payload.paymentStatus);
+    const guestName = reservation?.guest ? `${reservation.guest.firstName} ${reservation.guest.lastName}`.trim() : "Unknown Guest";
+    const normalizedStatus = normalizePaymentStatus(payload.paymentStatus ?? payload.status);
     const normalizedMethod = normalizePaymentMethod(payload.method || "Cash");
 
     const payment = await prisma.payment.create({
       data: {
-        reservationId: payload.reservationId,
+        reservationId: reservationIdNum,
         amount: payload.amount,
         method: normalizedMethod,
-        status: normalizedStatus,
+        paymentStatus: normalizedStatus,
       },
     });
 
@@ -424,13 +462,13 @@ router.post("/payments", async (req, res, next) => {
         method: normalizedMethod,
         status: normalizedStatus,
         reservation: {
-          id: reservation.id,
-          guest: reservation.guest,
-          roomId: reservation.roomId,
+          id: reservation?.id,
+          guest: reservation?.guest,
+          roomId: reservation?.roomId,
         },
       }),
       guest: guestName,
-      roomId: reservation.roomId ?? "",
+      roomId: reservation?.roomId ?? "",
     };
 
     res.status(201).json(enriched);
@@ -439,26 +477,28 @@ router.post("/payments", async (req, res, next) => {
   }
 });
 
-router.put("/payments/:id", async (req, res, next) => {
+router.put("/payments/:id", async (req: Request, res: Response, next: NextFunction) => {
   try {
     const payload = paymentSchema.partial().parse(req.body);
-    const existingPayment = await prisma.payment.findUnique({ where: { id: req.params.id } });
+    const paymentId = Number(Array.isArray(req.params.id) ? req.params.id[0] : req.params.id);
+    const existingPayment = await prisma.payment.findUnique({ where: { id: paymentId } });
     if (!existingPayment) return res.status(404).json({ error: "Payment not found" });
 
-    const reservation = payload.reservationId
-      ? await prisma.reservation.findUnique({ where: { id: payload.reservationId }, include: { guest: true } })
-      : await prisma.reservation.findUnique({ where: { id: existingPayment.reservationId }, include: { guest: true } });
+    const targetResId = payload.reservationId ? Number(payload.reservationId) : existingPayment.reservationId;
+    const reservation = targetResId
+      ? await prisma.reservation.findUnique({ where: { id: targetResId }, include: { guest: true } })
+      : null;
 
-    const normalizedStatus = normalizePaymentStatus(payload.status ?? payload.paymentStatus ?? existingPayment.status);
+    const normalizedStatus = normalizePaymentStatus(payload.paymentStatus ?? payload.status ?? existingPayment.paymentStatus);
     const normalizedMethod = normalizePaymentMethod(payload.method || existingPayment.method);
 
     const payment = await prisma.payment.update({
-      where: { id: req.params.id },
+      where: { id: paymentId },
       data: {
-        ...(payload.reservationId ? { reservationId: payload.reservationId } : {}),
+        ...(payload.reservationId ? { reservationId: Number(payload.reservationId) } : {}),
         ...(payload.amount !== undefined ? { amount: payload.amount } : {}),
         method: normalizedMethod,
-        status: normalizedStatus,
+        paymentStatus: normalizedStatus,
       },
     });
 
@@ -468,14 +508,14 @@ router.put("/payments/:id", async (req, res, next) => {
         reservationId: payment.reservationId,
         amount: payment.amount,
         method: payment.method,
-        status: payment.status,
+        status: payment.paymentStatus,
         reservation: {
           id: reservation?.id ?? payment.reservationId,
           guest: reservation?.guest,
           roomId: reservation?.roomId,
         },
       }),
-      guest: reservation?.guest ? `${reservation.guest.firstName} ${reservation.guest.lastName}`.trim() : existingPayment.reservationId,
+      guest: reservation?.guest ? `${reservation.guest.firstName} ${reservation.guest.lastName}`.trim() : (existingPayment.reservationId ? String(existingPayment.reservationId) : "Unknown Guest"),
       roomId: reservation?.roomId ?? "",
     };
 
@@ -485,16 +525,17 @@ router.put("/payments/:id", async (req, res, next) => {
   }
 });
 
-router.delete("/payments/:id", async (req, res, next) => {
+router.delete("/payments/:id", async (req: Request, res: Response, next: NextFunction) => {
   try {
-    await prisma.payment.delete({ where: { id: req.params.id } });
+    const id = Number(Array.isArray(req.params.id) ? req.params.id[0] : req.params.id);
+    await prisma.payment.delete({ where: { id } });
     res.status(204).send();
   } catch (error) {
     next(error);
   }
 });
 
-router.get("/cash-ledger", async (req, res, next) => {
+router.get("/cash-ledger", async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { page, limit, sortBy, sortOrder, q } = parsePagination(req);
     const skip = (page - 1) * limit;
@@ -509,34 +550,36 @@ router.get("/cash-ledger", async (req, res, next) => {
   }
 });
 
-router.post("/cash-ledger", async (req, res, next) => {
+router.post("/cash-ledger", async (req: Request, res: Response, next: NextFunction) => {
   try {
     const payload = cashLedgerSchema.parse(req.body);
-    const ledger = await prisma.cashLedger.create({ data: { ...payload, openingTime: payload.openingTime ? new Date(payload.openingTime) : new Date(), closingTime: payload.closingTime ? new Date(payload.closingTime) : undefined } });
+    const ledger = await prisma.cashLedger.create({
+      data: {
+        employeeName: payload.employeeName,
+        openingCash: payload.openingCash,
+        closingCash: payload.closingCash,
+        status: payload.status,
+        notes: payload.notes,
+      },
+    });
     res.status(201).json(ledger);
   } catch (error) {
     next(error);
   }
 });
 
-router.put("/cash-ledger/:id", async (req, res, next) => {
+router.put("/cash-ledger/:id", async (req: Request, res: Response, next: NextFunction) => {
   try {
+    const id = Number(Array.isArray(req.params.id) ? req.params.id[0] : req.params.id);
     const payload = cashLedgerSchema.partial().parse(req.body);
     const ledger = await prisma.cashLedger.update({
-      where: { id: req.params.id },
+      where: { id },
       data: {
         ...(payload.employeeName ? { employeeName: payload.employeeName } : {}),
-        ...(payload.openingTime ? { openingTime: new Date(payload.openingTime) } : {}),
-        ...(payload.closingTime ? { closingTime: new Date(payload.closingTime) } : {}),
         ...(payload.openingCash !== undefined ? { openingCash: payload.openingCash } : {}),
         ...(payload.closingCash !== undefined ? { closingCash: payload.closingCash } : {}),
-        ...(payload.expectedCash !== undefined ? { expectedCash: payload.expectedCash } : {}),
-        ...(payload.actualCash !== undefined ? { actualCash: payload.actualCash } : {}),
-        ...(payload.difference !== undefined ? { difference: payload.difference } : {}),
-        ...(payload.variance !== undefined ? { variance: payload.variance } : {}),
         ...(payload.status ? { status: payload.status } : {}),
         ...(payload.notes !== undefined ? { notes: payload.notes } : {}),
-        ...(payload.movementHistory !== undefined ? { movementHistory: payload.movementHistory } : {}),
       },
     });
     res.json(ledger);
@@ -545,16 +588,17 @@ router.put("/cash-ledger/:id", async (req, res, next) => {
   }
 });
 
-router.delete("/cash-ledger/:id", async (req, res, next) => {
+router.delete("/cash-ledger/:id", async (req: Request, res: Response, next: NextFunction) => {
   try {
-    await prisma.cashLedger.delete({ where: { id: req.params.id } });
+    const id = Number(Array.isArray(req.params.id) ? req.params.id[0] : req.params.id);
+    await prisma.cashLedger.delete({ where: { id } });
     res.status(204).send();
   } catch (error) {
     next(error);
   }
 });
 
-router.get("/shift-audits", async (req, res, next) => {
+router.get("/shift-audits", async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { page, limit, sortBy, sortOrder, q } = parsePagination(req);
     const skip = (page - 1) * limit;
@@ -569,35 +613,54 @@ router.get("/shift-audits", async (req, res, next) => {
   }
 });
 
-router.post("/shift-audits", async (req, res, next) => { try {
+router.post("/shift-audits", async (req: Request, res: Response, next: NextFunction) => { try {
     const payload = shiftAuditSchema.parse(req.body);
-    const audit = await prisma.shiftAudit.create({ data: { ...payload, openingTime: payload.openingTime ? new Date(payload.openingTime) : new Date(), closingTime: payload.closingTime ? new Date(payload.closingTime) : undefined } });
+    const audit = await prisma.shiftAudit.create({
+      data: {
+        employeeName: payload.employeeName,
+        openingCash: payload.openingCash,
+        closingCash: payload.closingCash,
+        status: payload.status,
+        notes: payload.notes,
+      },
+    });
     res.status(201).json(audit);
   } catch (error) {
     next(error);
   }
 });
 
-router.put("/shift-audits/:id", async (req, res, next) => {
+router.put("/shift-audits/:id", async (req: Request, res: Response, next: NextFunction) => {
   try {
+    const id = Number(Array.isArray(req.params.id) ? req.params.id[0] : req.params.id);
     const payload = shiftAuditSchema.partial().parse(req.body);
-    const audit = await prisma.shiftAudit.update({ where: { id: req.params.id }, data: { ...(payload.openingTime ? { openingTime: new Date(payload.openingTime) } : {}), ...(payload.closingTime ? { closingTime: new Date(payload.closingTime) } : {}), ...(payload.employeeName ? { employeeName: payload.employeeName } : {}), ...(payload.openingCash !== undefined ? { openingCash: payload.openingCash } : {}), ...(payload.closingCash !== undefined ? { closingCash: payload.closingCash } : {}), ...(payload.expectedCash !== undefined ? { expectedCash: payload.expectedCash } : {}), ...(payload.actualCash !== undefined ? { actualCash: payload.actualCash } : {}), ...(payload.difference !== undefined ? { difference: payload.difference } : {}), ...(payload.variance !== undefined ? { variance: payload.variance } : {}), ...(payload.status ? { status: payload.status } : {}), ...(payload.notes !== undefined ? { notes: payload.notes } : {}) } });
+    const audit = await prisma.shiftAudit.update({
+      where: { id },
+      data: {
+        ...(payload.employeeName ? { employeeName: payload.employeeName } : {}),
+        ...(payload.openingCash !== undefined ? { openingCash: payload.openingCash } : {}),
+        ...(payload.closingCash !== undefined ? { closingCash: payload.closingCash } : {}),
+        ...(payload.status ? { status: payload.status } : {}),
+        ...(payload.notes !== undefined ? { notes: payload.notes } : {}),
+      },
+    });
     res.json(audit);
   } catch (error) {
     next(error);
   }
 });
 
-router.delete("/shift-audits/:id", async (req, res, next) => {
+router.delete("/shift-audits/:id", async (req: Request, res: Response, next: NextFunction) => {
   try {
-    await prisma.shiftAudit.delete({ where: { id: req.params.id } });
+    const id = Number(Array.isArray(req.params.id) ? req.params.id[0] : req.params.id);
+    await prisma.shiftAudit.delete({ where: { id } });
     res.status(204).send();
   } catch (error) {
     next(error);
   }
 });
 
-router.get("/shift-audit", async (req, res, next) => {
+router.get("/shift-audit", async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { page, limit, sortBy, sortOrder, q } = parsePagination(req);
     const skip = (page - 1) * limit;
@@ -612,22 +675,30 @@ router.get("/shift-audit", async (req, res, next) => {
   }
 });
 
-router.post("/shift-audit", async (req, res, next) => { try {
+router.post("/shift-audit", async (req: Request, res: Response, next: NextFunction) => { try {
     const payload = shiftAuditSchema.parse(req.body);
-    const audit = await prisma.shiftAudit.create({ data: { ...payload, openingTime: payload.openingTime ? new Date(payload.openingTime) : new Date(), closingTime: payload.closingTime ? new Date(payload.closingTime) : undefined } });
+    const audit = await prisma.shiftAudit.create({
+      data: {
+        employeeName: payload.employeeName,
+        openingCash: payload.openingCash,
+        closingCash: payload.closingCash,
+        status: payload.status,
+        notes: payload.notes,
+      },
+    });
     res.status(201).json(audit);
   } catch (error) {
     next(error);
   }
 });
 
-router.get("/vehicles", async (req, res, next) => {
+router.get("/vehicles", async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { page, limit, sortBy, sortOrder, q } = parsePagination(req);
     const skip = (page - 1) * limit;
     const where = q ? { OR: [{ licensePlate: { contains: q, mode: "insensitive" as const } }, { make: { contains: q, mode: "insensitive" as const } }, { model: { contains: q, mode: "insensitive" as const } }] } : {};
     const [items, total] = await Promise.all([
-      prisma.vehicle.findMany({ where, skip, take: limit, orderBy: buildSort(sortBy, sortOrder) ?? { createdAt: "desc" }, include: { guest: true, reservation: true } }),
+      prisma.vehicle.findMany({ where, skip, take: limit, orderBy: buildSort(sortBy, sortOrder) ?? { createdAt: "desc" } }),
       prisma.vehicle.count({ where }),
     ]);
     res.json({ items, page, limit, total, pages: Math.ceil(total / limit) });
@@ -636,9 +707,10 @@ router.get("/vehicles", async (req, res, next) => {
   }
 });
 
-router.get("/vehicles/:id", async (req, res, next) => {
+router.get("/vehicles/:id", async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const vehicle = await prisma.vehicle.findUnique({ where: { id: req.params.id }, include: { guest: true, reservation: true } });
+    const id = Number(Array.isArray(req.params.id) ? req.params.id[0] : req.params.id);
+    const vehicle = await prisma.vehicle.findUnique({ where: { id } });
     if (!vehicle) return res.status(404).json({ error: "Vehicle not found" });
     res.json(vehicle);
   } catch (error) {
@@ -646,35 +718,54 @@ router.get("/vehicles/:id", async (req, res, next) => {
   }
 });
 
-router.post("/vehicles", async (req, res, next) => {
+router.post("/vehicles", async (req: Request, res: Response, next: NextFunction) => {
   try {
     const payload = vehicleSchema.parse(req.body);
-    const vehicle = await prisma.vehicle.create({ data: { ...payload, arrivalTime: payload.arrivalTime ? new Date(payload.arrivalTime) : new Date(), departureTime: payload.departureTime ? new Date(payload.departureTime) : undefined }, include: { guest: true, reservation: true } });
+    const vehicle = await prisma.vehicle.create({
+      data: {
+        make: payload.make,
+        model: payload.model,
+        licensePlate: payload.licensePlate,
+        state: payload.state,
+        parkingSlot: payload.parkingSlot,
+      },
+    });
     res.status(201).json(vehicle);
   } catch (error) {
     next(error);
   }
 });
 
-router.put("/vehicles/:id", async (req, res, next) => {  try {
+router.put("/vehicles/:id", async (req: Request, res: Response, next: NextFunction) => {  try {
+    const id = Number(Array.isArray(req.params.id) ? req.params.id[0] : req.params.id);
     const payload = vehicleSchema.partial().parse(req.body);
-    const vehicle = await prisma.vehicle.update({ where: { id: req.params.id }, data: { ...payload, arrivalTime: payload.arrivalTime ? new Date(payload.arrivalTime) : undefined, departureTime: payload.departureTime ? new Date(payload.departureTime) : undefined }, include: { guest: true, reservation: true } });
+    const vehicle = await prisma.vehicle.update({
+      where: { id },
+      data: {
+        ...(payload.make ? { make: payload.make } : {}),
+        ...(payload.model ? { model: payload.model } : {}),
+        ...(payload.licensePlate ? { licensePlate: payload.licensePlate } : {}),
+        ...(payload.state ? { state: payload.state } : {}),
+        ...(payload.parkingSlot !== undefined ? { parkingSlot: payload.parkingSlot } : {}),
+      },
+    });
     res.json(vehicle);
   } catch (error) {
     next(error);
   }
 });
 
-router.delete("/vehicles/:id", async (req, res, next) => {
+router.delete("/vehicles/:id", async (req: Request, res: Response, next: NextFunction) => {
   try {
-    await prisma.vehicle.delete({ where: { id: req.params.id } });
+    const id = Number(Array.isArray(req.params.id) ? req.params.id[0] : req.params.id);
+    await prisma.vehicle.delete({ where: { id } });
     res.status(204).send();
   } catch (error) {
     next(error);
   }
 });
 
-router.get("/housekeeping", async (req, res, next) => {
+router.get("/housekeeping", async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { page, limit, sortBy, sortOrder, q } = parsePagination(req);
     const payload = await withDatabase(async () => {
@@ -692,27 +783,43 @@ router.get("/housekeeping", async (req, res, next) => {
   }
 });
 
-router.post("/housekeeping", authenticateJwt, requireRole(["admin", "manager", "housekeeping"]), async (req, res, next) => {
+router.post("/housekeeping", authenticateJwt, requireRole(["admin", "manager", "housekeeping"]), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const payload = housekeepingSchema.parse(req.body);
-    const item = await prisma.housekeeping.create({ data: payload });
+    const item = await prisma.housekeeping.create({
+      data: {
+        roomId: payload.roomId ? Number(payload.roomId) : undefined,
+        status: payload.status,
+        assignedTo: payload.assignedTo,
+        notes: payload.notes,
+      },
+    });
     res.status(201).json(item);
   } catch (error) {
     next(error);
   }
 });
 
-router.put("/housekeeping/:id", authenticateJwt, requireRole(["admin", "manager", "housekeeping"]), async (req, res, next) => {
+router.put("/housekeeping/:id", authenticateJwt, requireRole(["admin", "manager", "housekeeping"]), async (req: Request, res: Response, next: NextFunction) => {
   try {
+    const id = Number(Array.isArray(req.params.id) ? req.params.id[0] : req.params.id);
     const payload = housekeepingSchema.partial().parse(req.body);
-    const item = await prisma.housekeeping.update({ where: { id: req.params.id }, data: payload });
+    const item = await prisma.housekeeping.update({
+      where: { id },
+      data: {
+        ...(payload.roomId ? { roomId: Number(payload.roomId) } : {}),
+        ...(payload.status ? { status: payload.status } : {}),
+        ...(payload.assignedTo !== undefined ? { assignedTo: payload.assignedTo } : {}),
+        ...(payload.notes !== undefined ? { notes: payload.notes } : {}),
+      },
+    });
     res.json(item);
   } catch (error) {
     next(error);
   }
 });
 
-router.get("/maintenance", async (req, res, next) => {
+router.get("/maintenance", async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { page, limit, sortBy, sortOrder, q } = parsePagination(req);
     const payload = await withDatabase(async () => {
@@ -730,35 +837,53 @@ router.get("/maintenance", async (req, res, next) => {
   }
 });
 
-router.post("/maintenance", authenticateJwt, requireRole(["admin", "manager"]), async (req, res, next) => {
+router.post("/maintenance", authenticateJwt, requireRole(["admin", "manager"]), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const payload = maintenanceSchema.parse(req.body);
-    const item = await prisma.maintenance.create({ data: payload });
+    const item = await prisma.maintenance.create({
+      data: {
+        roomId: payload.roomId ? Number(payload.roomId) : undefined,
+        issue: payload.issue,
+        priority: payload.priority,
+        status: payload.status,
+        notes: payload.assignedTo ? `Assigned to: ${payload.assignedTo}` : undefined,
+      },
+    });
     res.status(201).json(item);
   } catch (error) {
     next(error);
   }
 });
 
-router.put("/maintenance/:id", authenticateJwt, requireRole(["admin", "manager"]), async (req, res, next) => {
+router.put("/maintenance/:id", authenticateJwt, requireRole(["admin", "manager"]), async (req: Request, res: Response, next: NextFunction) => {
   try {
+    const id = Number(Array.isArray(req.params.id) ? req.params.id[0] : req.params.id);
     const payload = maintenanceSchema.partial().parse(req.body);
-    const item = await prisma.maintenance.update({ where: { id: req.params.id }, data: payload });
+    const item = await prisma.maintenance.update({
+      where: { id },
+      data: {
+        ...(payload.roomId ? { roomId: Number(payload.roomId) } : {}),
+        ...(payload.issue ? { issue: payload.issue } : {}),
+        ...(payload.priority ? { priority: payload.priority } : {}),
+        ...(payload.status ? { status: payload.status } : {}),
+        ...(payload.assignedTo !== undefined ? { notes: `Assigned to: ${payload.assignedTo}` } : {}),
+      },
+    });
     res.json(item);
   } catch (error) {
     next(error);
   }
 });
 
-router.get("/notifications", async (req, res, next) => {
+router.get("/notifications", async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { page, limit, sortBy, sortOrder, q } = parsePagination(req);
     const payload = await withDatabase(async () => {
       const skip = (page - 1) * limit;
       const where = q ? { OR: [{ title: { contains: q, mode: "insensitive" as const } }, { message: { contains: q, mode: "insensitive" as const } }] } : {};
       const [items, total] = await Promise.all([
-        prisma.notification.findMany({ where, skip, take: limit, orderBy: buildSort(sortBy, sortOrder) ?? { createdAt: "desc" } }),
-        prisma.notification.count({ where }),
+        prisma.appNotification.findMany({ where, skip, take: limit, orderBy: buildSort(sortBy, sortOrder) ?? { createdAt: "desc" } }),
+        prisma.appNotification.count({ where }),
       ]);
       return { items, page, limit, total, pages: Math.ceil(total / limit) };
     }, { items: [], page, limit, total: 0, pages: 0 });
@@ -768,17 +893,50 @@ router.get("/notifications", async (req, res, next) => {
   }
 });
 
-router.post("/notifications", authenticateJwt, requireRole(["admin", "manager", "receptionist"]), async (req, res, next) => {
+router.post("/notifications", async (req: Request, res: Response, next: NextFunction) => {
   try {
     const payload = notificationSchema.parse(req.body);
-    const item = await prisma.notification.create({ data: payload });
+    const item = await prisma.appNotification.create({ data: payload });
     res.status(201).json(item);
   } catch (error) {
     next(error);
   }
 });
 
-router.get("/analytics", async (_req, res, next) => {
+router.post("/notifications/mark-read", async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { ids } = req.body ?? {};
+    if (ids && Array.isArray(ids) && ids.length > 0) {
+      await prisma.appNotification.updateMany({
+        where: { id: { in: ids.map(Number) } },
+        data: { isRead: true },
+      });
+    } else {
+      await prisma.appNotification.updateMany({
+        where: { isRead: false },
+        data: { isRead: true },
+      });
+    }
+    res.json({ success: true });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.post("/notifications/:id/read", async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const id = Number(Array.isArray(req.params.id) ? req.params.id[0] : req.params.id);
+    await prisma.appNotification.update({
+      where: { id },
+      data: { isRead: true },
+    });
+    res.json({ success: true });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.get("/analytics", async (_req: Request, res: Response, next: NextFunction) => {
   try {
     const payload = await withDatabase(async () => {
       const [occupancy, revenue, arrivals, departures] = await Promise.all([
@@ -795,14 +953,14 @@ router.get("/analytics", async (_req, res, next) => {
   }
 });
 
-router.get("/dashboard", async (_req, res, next) => {
+router.get("/dashboard", async (_req: Request, res: Response, next: NextFunction) => {
   try {
     const payload = await withDatabase(async () => {
       const [rooms, reservations, guests, notifications] = await Promise.all([
         prisma.room.count(),
         prisma.reservation.count(),
         prisma.guest.count(),
-        prisma.notification.count(),
+        prisma.appNotification.count(),
       ]);
       return { rooms, reservations, guests, notifications };
     }, { rooms: 0, reservations: 0, guests: 0, notifications: 0 });
@@ -812,16 +970,16 @@ router.get("/dashboard", async (_req, res, next) => {
   }
 });
 
-router.get("/weather", async (_req, res) => {
+router.get("/weather", async (_req: Request, res: Response) => {
   res.json({ city: "Nairobi", temperature: 24, condition: "Sunny" });
 });
 
-router.get("/room-availability", async (req, res, next) => {
+router.get("/room-availability", async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { page, limit, sortBy, sortOrder, q } = parsePagination(req);
     const payload = await withDatabase(async () => {
       const skip = (page - 1) * limit;
-      const rooms = await prisma.room.findMany({ where: q ? { OR: [{ number: { contains: q, mode: "insensitive" as const } }, { type: { contains: q, mode: "insensitive" as const } }] } : {}, skip, take: limit, orderBy: buildSort(sortBy, sortOrder) ?? { number: "asc" } });
+      const rooms = await prisma.room.findMany({ where: q ? { OR: [{ room_number: { contains: q, mode: "insensitive" as const } }] } : {}, skip, take: limit, orderBy: buildSort(sortBy, sortOrder) ?? { room_number: "asc" } });
       return { items: rooms, page, limit, total: rooms.length, pages: 1 };
     }, { items: [], page, limit, total: 0, pages: 0 });
     res.json(payload);

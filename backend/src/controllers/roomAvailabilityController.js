@@ -4,8 +4,10 @@ const prisma = new PrismaClient();
 export async function getRoomAvailability(req, res) {
   try {
     const { startDate, endDate } = req.query;
-    const start = startDate ? new Date(startDate) : new Date();
-    const end = endDate ? new Date(endDate) : new Date(Date.now() + 14 * 24 * 60 * 60 * 1000);
+    let start = startDate ? new Date(startDate) : new Date();
+    let end = endDate ? new Date(endDate) : new Date(Date.now() + 14 * 24 * 60 * 60 * 1000);
+    if (isNaN(start.getTime())) start = new Date();
+    if (isNaN(end.getTime())) end = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000);
 
     const [rooms, reservations] = await Promise.all([
       prisma.room.findMany({ include: { room_type: true } }),

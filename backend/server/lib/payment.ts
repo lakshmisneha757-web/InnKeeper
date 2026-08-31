@@ -30,7 +30,7 @@ export function normalizePaymentStatus(status?: string | null) {
 }
 
 export function buildPaymentRecord(input: {
-  reservationId: string;
+  reservationId?: string | number | null;
   amount: number;
   method?: string | null;
   status?: string | null;

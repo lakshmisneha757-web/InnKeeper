@@ -1,4 +1,5 @@
 import type { Config } from "tailwindcss";
+import tailwindcssAnimate from "tailwindcss-animate";
 
 const config: Config = {
   darkMode: ["class"],
@@ -15,30 +16,48 @@ const config: Config = {
     },
     extend: {
       colors: {
-        border: "hsl(214 32% 91%)",
-        input: "hsl(214 32% 91%)",
-        ring: "hsl(221 83% 53%)",
-        background: "hsl(0 0% 100%)",
-        foreground: "hsl(222 47% 11%)",
+        border: "var(--border)",
+        input: "var(--input)",
+        ring: "var(--ring)",
+        background: "var(--background)",
+        foreground: "var(--foreground)",
         primary: {
-          DEFAULT: "hsl(221 83% 53%)",
-          foreground: "hsl(0 0% 100%)",
+          DEFAULT: "var(--primary)",
+          foreground: "var(--primary-foreground)",
         },
         secondary: {
-          DEFAULT: "hsl(210 40% 96%)",
-          foreground: "hsl(222 47% 11%)",
+          DEFAULT: "var(--secondary)",
+          foreground: "var(--secondary-foreground)",
         },
         muted: {
-          DEFAULT: "hsl(210 40% 96%)",
-          foreground: "hsl(215 16% 47%)",
+          DEFAULT: "var(--muted)",
+          foreground: "var(--muted-foreground)",
         },
         destructive: {
-          DEFAULT: "hsl(0 84% 60%)",
-          foreground: "hsl(0 0% 100%)",
+          DEFAULT: "var(--destructive)",
+          foreground: "var(--destructive-foreground)",
         },
         accent: {
-          DEFAULT: "hsl(210 40% 96%)",
-          foreground: "hsl(222 47% 11%)",
+          DEFAULT: "var(--accent)",
+          foreground: "var(--accent-foreground)",
+        },
+        card: {
+          DEFAULT: "var(--card)",
+          foreground: "var(--card-foreground)",
+        },
+        popover: {
+          DEFAULT: "var(--popover)",
+          foreground: "var(--popover-foreground)",
+        },
+        sidebar: {
+          DEFAULT: "var(--sidebar)",
+          foreground: "var(--sidebar-foreground)",
+          primary: "var(--sidebar-primary)",
+          "primary-foreground": "var(--sidebar-primary-foreground)",
+          accent: "var(--sidebar-accent)",
+          "accent-foreground": "var(--sidebar-accent-foreground)",
+          border: "var(--sidebar-border)",
+          ring: "var(--sidebar-ring)",
         },
       },
       borderRadius: {
@@ -62,7 +81,7 @@ const config: Config = {
       },
     },
   },
-  plugins: [require("tailwindcss-animate")],
+  plugins: [tailwindcssAnimate],
 };
 
 export default config;

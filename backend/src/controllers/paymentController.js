@@ -11,13 +11,46 @@ function paginate(data, page, limit) {
 export async function listPayments(req, res) {
   try {
     const { page = 1, limit = 20, q = '' } = req.query;
-    const payments = await prisma.payment.findMany({
-      include: { reservation: { include: { guest: true } } },
-      orderBy: { createdAt: 'desc' }
+    // Only return payments that have been completed by guests (paymentStatus !== 'Pending')
+    const [payments, rooms] = await Promise.all([
+      prisma.payment.findMany({
+        where: {
+          paymentStatus: {
+            not: 'Pending'
+          }
+        },
+        include: { reservation: { include: { guest: true } } },
+        orderBy: { createdAt: 'desc' }
+      }),
+      prisma.room.findMany()
+    ]);
+
+    const mapped = payments.map(p => {
+      const guestObj = p.reservation?.guest;
+      const guestName = guestObj
+        ? `${guestObj.firstName} ${guestObj.lastName}`.trim()
+        : (p.notes?.includes("Holder:") ? p.notes.split("Holder:")[1]?.split("|")[0]?.trim() : "—");
+
+      const isRefundedOrFailed = p.paymentStatus === 'Refunded' || p.paymentStatus === 'Failed';
+      const status = isRefundedOrFailed ? p.paymentStatus : 'Paid';
+
+      const rawRoomId = p.roomId || p.reservation?.roomId;
+      const roomObj = rooms.find(rm => String(rm.id) === String(rawRoomId) || String(rm.room_number) === String(rawRoomId));
+      const roomNumberDisplay = roomObj ? roomObj.room_number : (rawRoomId ? String(rawRoomId) : "—");
+
+      return {
+        ...p,
+        status,
+        paymentStatus: status,
+        guest: guestName,
+        roomId: roomNumberDisplay,
+        roomNumber: roomNumberDisplay,
+      };
     });
+
     const filtered = q
-      ? payments.filter(p => `${p.method} ${p.paymentStatus} ${p.notes || ''}`.toLowerCase().includes(q.toLowerCase()))
-      : payments;
+      ? mapped.filter(p => `${p.guest} ${p.method} ${p.status} ${p.roomId} ${p.notes || ''}`.toLowerCase().includes(q.toLowerCase()))
+      : mapped;
     res.json(paginate(filtered, Number(page), Number(limit)));
   } catch (err) {
     res.status(500).json({ error: err.message });

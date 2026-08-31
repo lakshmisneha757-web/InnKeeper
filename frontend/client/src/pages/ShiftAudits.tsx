@@ -12,14 +12,19 @@ import { Form, FormItem, FormLabel, FormControl } from "@/components/ui/form";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { shiftAuditFormSchema, ShiftAuditForm } from "@/lib/module5Schemas";
+import { useTranslation } from "react-i18next";
 
-export default function ShiftAuditsPage(){
-  const [search,setSearch]=useState("");
+export default function ShiftAuditsPage() {
+  const { t } = useTranslation();
+  const [search, setSearch] = useState("");
+  const [page, setPage] = useState(1);
+  const itemsPerPage = 10;
   const qc = useQueryClient();
-  const q = useQuery({ queryKey:["shift-audits",search], queryFn: async ()=>{ const { data } = await apiClient.shiftAudits.list({ limit: 50, q: search }); return normalizeListResponse<any>(data); } });
+  const q = useQuery({ queryKey:["shift-audits",search, page], queryFn: async ()=>{ const { data } = await apiClient.shiftAudits.list({ limit: 50, q: search }); return normalizeListResponse<any>(data); } });
+  const items = q.data?.items ?? [];
+  const totalPages = Math.ceil(items.length / itemsPerPage) || 1;
 
   const create = useMutation({ mutationFn: (payload:any)=>apiClient.shiftAudits.create(payload), onSuccess: ()=>{qc.invalidateQueries({ queryKey: ["shift-audits"] }); qc.invalidateQueries({ queryKey: ["dashboard"] }); toast.success("Audit created");}, onError: (err:any)=>{ const msg = err?.response?.data?.error ?? err?.message ?? "Failed"; toast.error(String(msg)); } });
-  
 
   const update = useMutation({ mutationFn: ({ id, data }:any)=>apiClient.shiftAudits.update(id, data), onSuccess: ()=>{qc.invalidateQueries({ queryKey: ["shift-audits"] }); toast.success("Audit updated");}, onError: (err:any)=>{ const msg = err?.response?.data?.error ?? err?.message ?? "Failed"; toast.error(String(msg)); } });
 
@@ -40,11 +45,11 @@ export default function ShiftAuditsPage(){
     <div className="space-y-6">
       <Card>
         <CardHeader className="flex items-center justify-between">
-          <CardTitle>Shift Audits</CardTitle>
+          <CardTitle>{t("shiftAudits.title")}</CardTitle>
           <div className="flex items-center gap-2">
-            <Input placeholder="Search audits" value={search} onChange={(e:any)=>setSearch(e.target.value)} />
-            <Button onClick={handleCreate}>New</Button>
-            <Button variant="outline" onClick={handleExport}>Export CSV</Button>
+            <Input placeholder={t("shiftAudits.searchPlaceholder")} value={search} onChange={(e:any)=>setSearch(e.target.value)} />
+            <Button onClick={handleCreate} className="cursor-pointer">{t("common.create")}</Button>
+            <Button variant="outline" onClick={handleExport} className="cursor-pointer">Export CSV</Button>
           </div>
         </CardHeader>
         <CardContent>
@@ -52,60 +57,77 @@ export default function ShiftAuditsPage(){
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Employee</TableHead>
-                  <TableHead>Opening</TableHead>
-                  <TableHead>Closing</TableHead>
-                  <TableHead>Difference</TableHead>
-                  <TableHead>Status</TableHead>
+                  <TableHead>{t("shiftAudits.employee")}</TableHead>
+                  <TableHead>{t("shiftAudits.opening")}</TableHead>
+                  <TableHead>{t("shiftAudits.closing")}</TableHead>
+                  <TableHead>{t("shiftAudits.difference")}</TableHead>
+                  <TableHead>{t("common.status")}</TableHead>
+                  <TableHead>{t("common.actions")}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {(q.data?.items ?? []).map((r:any)=> (
+                {items.slice((page - 1) * itemsPerPage, page * itemsPerPage).map((r:any)=> (
                   <TableRow key={r.id}>
-                    <TableCell>{r.employeeName}</TableCell>
-                    <TableCell>{r.openingCash}</TableCell>
-                    <TableCell>{r.closingCash}</TableCell>
-                    <TableCell>{r.difference}</TableCell>
-                    <TableCell>{r.status}</TableCell>
-                      <TableCell className="flex gap-2">
-                        <Button size="sm" onClick={()=>{ setEditing(r); form.reset({ employeeName: r.employeeName, openingCash: r.openingCash ?? 0, closingCash: r.closingCash ?? 0, status: r.status ?? "open", notes: r.notes ?? "" }); setDialogOpen(true); }}>Edit</Button>
-                        <Button size="sm" variant="destructive" onClick={()=>{ if(!window.confirm("Delete audit?")) return; remove.mutate(r.id); }}>Delete</Button>
-                      </TableCell>
+                    <TableCell className="font-semibold">{r.employeeName}</TableCell>
+                    <TableCell>₹{r.openingCash}</TableCell>
+                    <TableCell>₹{r.closingCash}</TableCell>
+                    <TableCell>₹{r.difference}</TableCell>
+                    <TableCell className="capitalize">{r.status}</TableCell>
+                    <TableCell className="flex gap-2">
+                      <Button size="sm" className="cursor-pointer" onClick={()=>{ setEditing(r); form.reset({ employeeName: r.employeeName, openingCash: r.openingCash ?? 0, closingCash: r.closingCash ?? 0, status: r.status ?? "open", notes: r.notes ?? "" }); setDialogOpen(true); }}>{t("common.edit")}</Button>
+                      <Button size="sm" variant="destructive" className="cursor-pointer" onClick={()=>{ if(!window.confirm("Delete audit?")) return; remove.mutate(r.id); }}>{t("common.delete")}</Button>
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
             </Table>
           </div>
+
+          {/* Pagination Controls */}
+          <div className="flex items-center justify-between mt-4 text-sm text-muted-foreground">
+            <span>Showing {Math.min(items.length, (page - 1) * itemsPerPage + 1)} - {Math.min(items.length, page * itemsPerPage)} of {items.length} shift audits</span>
+            <div className="flex items-center gap-2">
+              <Button size="sm" variant="outline" onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}>{t("common.previous")}</Button>
+              <span className="text-xs font-bold text-foreground">Page {page} of {totalPages}</span>
+              <Button size="sm" variant="outline" onClick={() => setPage(p => p + 1)} disabled={page >= totalPages}>{t("common.next")}</Button>
+            </div>
+          </div>
         </CardContent>
       </Card>
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent>
+        <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>{editing ? "Edit Audit" : "New Audit"}</DialogTitle>
+            <DialogTitle className="text-2xl font-bold text-slate-900">{editing ? t("shiftAudits.editAudit") : t("shiftAudits.newAudit")}</DialogTitle>
           </DialogHeader>
           <Form {...form}>
             <form onSubmit={form.handleSubmit((values)=>{
+              if (!values.employeeName || !values.employeeName.trim()) {
+                toast.error("Employee Name is required");
+                return;
+              }
               if (editing) update.mutate({ id: editing.id, data: values }); else create.mutate(values);
               setDialogOpen(false);
-            })}>
-              <div className="grid gap-2">
-                <FormItem>
-                  <FormLabel>Employee</FormLabel>
-                  <FormControl>
-                    <Input {...form.register("employeeName")} />
-                  </FormControl>
-                </FormItem>
-                <FormItem>
-                  <FormLabel>Opening Cash</FormLabel>
-                  <FormControl>
-                    <Input type="number" {...form.register("openingCash", { valueAsNumber: true })} />
-                  </FormControl>
-                </FormItem>
-                <div className="flex gap-2 justify-end">
-                  <Button type="button" variant="outline" onClick={()=>setDialogOpen(false)}>Cancel</Button>
-                  <Button type="submit">Save</Button>
-                </div>
+            })} className="space-y-4 pt-2">
+              <FormItem>
+                <FormLabel className="font-semibold text-slate-800">{t("shiftAudits.employeeName")}</FormLabel>
+                <FormControl>
+                  <Input placeholder="e.g. John Doe" required {...form.register("employeeName", { required: true })} />
+                </FormControl>
+              </FormItem>
+              <FormItem>
+                <FormLabel className="font-semibold text-slate-800">{t("shiftAudits.openingCash")}</FormLabel>
+                <FormControl>
+                  <Input type="number" placeholder="0.00" required {...form.register("openingCash", { valueAsNumber: true })} />
+                </FormControl>
+              </FormItem>
+              <div className="flex gap-3 justify-end pt-4">
+                <Button type="button" variant="outline" className="h-11 rounded-2xl border-slate-200 bg-white hover:bg-slate-50 text-slate-700 font-medium px-6 shadow-2xs cursor-pointer" onClick={()=>setDialogOpen(false)}>
+                  {t("common.cancel")}
+                </Button>
+                <Button type="submit" className="h-11 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white font-semibold px-6 shadow-md shadow-blue-500/20" disabled={create.isPending || update.isPending}>
+                  {create.isPending || update.isPending ? t("common.saving") : t("shiftAudits.saveAudit")}
+                </Button>
               </div>
             </form>
           </Form>

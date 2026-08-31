@@ -3,9 +3,7 @@
 @tailwind utilities;
 
 
-@custom-variant dark (&:is(.dark *));
-
-@theme inline {
+:root {
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
@@ -53,7 +51,7 @@
   --card-foreground: oklch(0.2 0.02 245);
   --popover: oklch(0.997 0.004 245);
   --popover-foreground: oklch(0.2 0.02 245);
-  --primary: oklch(0.56 0.20 245);
+  --primary: oklch(0.62 0.19 235);
   --primary-foreground: oklch(0.99 0.005 245);
   --secondary: oklch(0.96 0.008 245);
   --secondary-foreground: oklch(0.34 0.02 245);
@@ -65,7 +63,7 @@
   --destructive-foreground: oklch(0.98 0 0);
   --border: oklch(0.92 0.008 245);
   --input: oklch(0.92 0.008 245);
-  --ring: oklch(0.56 0.2 245);
+  --ring: oklch(0.62 0.19 235);
   --chart-1: oklch(0.62 0.18 245);
   --chart-2: oklch(0.58 0.15 150);
   --chart-3: oklch(0.64 0.15 28);
@@ -73,12 +71,12 @@
   --chart-5: oklch(0.66 0.12 196);
   --sidebar: oklch(0.98 0.006 245);
   --sidebar-foreground: oklch(0.2 0.02 245);
-  --sidebar-primary: oklch(0.56 0.2 245);
+  --sidebar-primary: oklch(0.62 0.19 235);
   --sidebar-primary-foreground: oklch(0.99 0.005 245);
   --sidebar-accent: oklch(0.96 0.01 245);
   --sidebar-accent-foreground: oklch(0.18 0.02 245);
   --sidebar-border: oklch(0.92 0.008 245);
-  --sidebar-ring: oklch(0.56 0.2 245);
+  --sidebar-ring: oklch(0.62 0.19 235);
 }
 
 .dark {
@@ -118,17 +116,24 @@
 
 @layer base {
   * {
-    @apply border-border outline-ring/50;
+    @apply border-border;
   }
+
   body {
     @apply min-h-screen bg-background text-foreground antialiased;
     font-family: 'Inter', system-ui, -apple-system, sans-serif;
-    background-image: radial-gradient(circle at top left, rgba(56, 189, 248, 0.16), transparent 28%), linear-gradient(135deg, rgba(248, 250, 252, 0.98), rgba(241, 245, 249, 0.95));
+    background-image: radial-gradient(circle at top left, rgba(56, 189, 248, 0.12), transparent 28%), linear-gradient(135deg, rgba(248, 250, 252, 0.98), rgba(241, 245, 249, 0.95));
     background-attachment: fixed;
   }
+
+  html.dark body {
+    background-image: radial-gradient(circle at top left, rgba(14, 116, 144, 0.2), transparent 30%), linear-gradient(135deg, rgba(15, 23, 42, 0.98), rgba(30, 41, 59, 0.96));
+  }
+
   ::selection {
     @apply bg-sky-200/70 text-slate-900;
   }
+
   button:not(:disabled),
   [role="button"]:not([aria-disabled="true"]),
   [type="button"]:not(:disabled),
@@ -152,7 +157,17 @@
   }
 
   .glass-panel {
-    @apply rounded-2xl border border-white/70 bg-white/70 shadow-[0_20px_60px_rgba(15,23,42,0.06)] backdrop-blur-xl;
+    border-radius: 1rem;
+    border: 1px solid rgba(255, 255, 255, 0.7);
+    background-color: rgba(255, 255, 255, 0.7);
+    box-shadow: 0 20px 60px rgba(15, 23, 42, 0.06);
+    backdrop-filter: blur(24px);
+  }
+
+  html.dark .glass-panel {
+    border-color: rgba(255, 255, 255, 0.1);
+    background-color: rgba(15, 23, 42, 0.8);
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
   }
 
   .flex {

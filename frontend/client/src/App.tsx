@@ -42,6 +42,7 @@ function ProtectedApp() {
     <DashboardLayout>
       <Switch>
         <Route path={"/"} component={Dashboard} />
+        <Route path={"/dashboard"} component={Dashboard} />
         <Route path={"/payments"} component={Payments} />
         <Route path={"/vehicles"} component={Vehicles} />
         <Route path={"/cash-ledger"} component={CashLedger} />
@@ -66,6 +67,7 @@ function PublicRoutes() {
       <Route path="/forgot-password" component={ForgotPasswordPage} />
       <Route path="/reset-password" component={ResetPasswordPage} />
       <Route path="/" component={ProtectedApp} />
+      <Route path="/dashboard" component={ProtectedApp} />
       <Route path="/payments" component={ProtectedApp} />
       <Route path="/vehicles" component={ProtectedApp} />
       <Route path="/cash-ledger" component={ProtectedApp} />
@@ -84,7 +86,7 @@ function PublicRoutes() {
 function App() {
   return (
     <ErrorBoundary>
-      <ThemeProvider defaultTheme="dark" switchable>
+      <ThemeProvider>
         <TooltipProvider>
           <Toaster richColors closeButton />
           <AuthProvider>

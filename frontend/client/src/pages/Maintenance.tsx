@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "@/lib/api";
+import { useStore } from "@/lib/store";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,6 +12,41 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { Wrench, Plus, AlertTriangle, CheckCircle, Clock, Zap } from "lucide-react";
+import confetti from "canvas-confetti";
+
+function LiveStopwatch({ startTime, isPaused, accumulatedSeconds = 0 }: { startTime?: string | number; isPaused?: boolean; accumulatedSeconds?: number }) {
+  const [seconds, setSeconds] = useState(accumulatedSeconds);
+
+  useEffect(() => {
+    if (isPaused) {
+      setSeconds(accumulatedSeconds);
+      return;
+    }
+
+    const startMs = startTime ? new Date(startTime).getTime() : Date.now();
+    const updateTimer = () => {
+      const elapsed = Math.max(0, Math.floor((Date.now() - startMs) / 1000)) + accumulatedSeconds;
+      setSeconds(elapsed);
+    };
+    updateTimer();
+    const interval = setInterval(updateTimer, 1000);
+    return () => clearInterval(interval);
+  }, [startTime, isPaused, accumulatedSeconds]);
+
+  const mins = String(Math.floor(seconds / 60)).padStart(2, "0");
+  const secs = String(seconds % 60).padStart(2, "0");
+
+  return <span className="font-mono text-sm font-bold text-amber-900 dark:text-amber-300">{mins}:{secs}</span>;
+}
+
+function fireConfettiBlast() {
+  confetti({
+    particleCount: 100,
+    spread: 70,
+    origin: { y: 0.6 },
+    colors: ["#38bdf8", "#0284c7", "#10b981", "#f59e0b", "#ec4899", "#8b5cf6"],
+  });
+}
 
 function normalizeList(data: any) {
   if (Array.isArray(data)) return { items: data, total: data.length };
@@ -31,28 +67,87 @@ const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string }
   resolved:    { label: "Resolved",    color: "text-green-700",  bg: "bg-green-50" },
 };
 
+function getRoomForTicket(targetRoomId: any, allRooms: any[]) {
+  if (targetRoomId == null) return null;
+  const targetStr = String(targetRoomId).trim();
+  return allRooms.find((r: any) =>
+    String(r.id) === targetStr ||
+    String(r.number) === targetStr ||
+    String(r.room_number) === targetStr
+  );
+}
+
+import { useTranslation } from "react-i18next";
+
 export default function MaintenancePage() {
+  const { t } = useTranslation();
+
+  const getLocalizedIssue = (issue: string) => {
+    if (!issue) return "";
+    const match = issue.match(/^Room\s+(\S+)\s+reported\s+under\s+maintenance$/i);
+    if (match) {
+      return t("maintenance.autoIssuePattern", { number: match[1] });
+    }
+    return issue;
+  };
+  const storeRooms = useStore((state) => state.rooms);
+  const updateRoomStatus = useStore((state) => state.updateRoomStatus);
   const [filterPriority, setFilterPriority] = useState("all");
   const [filterStatus, setFilterStatus] = useState("all");
+  const [page, setPage] = useState(1);
+  const itemsPerPage = 8;
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [editing, setEditing] = useState<any | null>(null);
   const qc = useQueryClient();
 
   const mainQ = useQuery({
-    queryKey: ["maintenance", filterPriority, filterStatus],
+    queryKey: ["maintenance", filterPriority, filterStatus, storeRooms],
     queryFn: async () => {
-      const { data } = await apiClient.maintenance.list({ limit: 100 });
-      let list = normalizeList(data).items;
-      if (filterPriority !== "all") list = list.filter((r: any) => r.priority === filterPriority);
-      if (filterStatus !== "all") list = list.filter((r: any) => r.status === filterStatus);
-      return list;
+      const [{ data: mainData }, { data: roomsData }] = await Promise.all([
+        apiClient.maintenance.list({ limit: 250 }),
+        apiClient.rooms.list({ limit: 250 }),
+      ]);
+      const list = normalizeList(mainData).items;
+      const apiRooms = normalizeList(roomsData).items;
+      const allRooms = storeRooms.length > 0 ? storeRooms : apiRooms;
+
+      // Maintenance items are STRICTLY derived from rooms whose status is 'maintenance' in the rooms table
+      const activeMaintList: any[] = [];
+
+      allRooms.forEach((r: any) => {
+        const roomStatus = r.status?.toLowerCase();
+
+        // ONLY rooms whose status in the Rooms list is 'maintenance' should appear in Maintenance!
+        if (roomStatus === "maintenance") {
+          const existingTicket = list.find((m: any) =>
+            (String(m.roomId) === String(r.id) ||
+             String(m.roomId) === String(r.number) ||
+             String(m.roomId) === String(r.room_number)) &&
+            m.status !== "resolved"
+          );
+
+          activeMaintList.push(existingTicket || {
+            id: `maint-${r.id}`,
+            roomId: r.id,
+            issue: `Room ${r.number || r.room_number} reported under maintenance`,
+            priority: "high",
+            status: "open",
+            notes: "AC unit / hardware requires servicing and filter replacement.",
+          });
+        }
+      });
+
+      let filtered = activeMaintList;
+
+      if (filterPriority !== "all") filtered = filtered.filter((r: any) => r.priority === filterPriority);
+      if (filterStatus !== "all") filtered = filtered.filter((r: any) => r.status === filterStatus);
+      return filtered;
     },
   });
 
   const roomsQ = useQuery({
     queryKey: ["rooms-maint"],
     queryFn: async () => {
-      const { data } = await apiClient.rooms.list({ limit: 100 });
+      const { data } = await apiClient.rooms.list({ limit: 250 });
       return normalizeList(data).items;
     },
   });
@@ -63,205 +158,333 @@ export default function MaintenancePage() {
 
   const createM = useMutation({
     mutationFn: (d: any) => apiClient.maintenance.create({ ...d, roomId: d.roomId ? Number(d.roomId) : null }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["maintenance"] }); toast.success("Issue reported"); setDialogOpen(false); form.reset(); },
-    onError: (e: any) => toast.error(e?.response?.data?.error || "Failed"),
+    onSuccess: (_, variables) => {
+      qc.invalidateQueries({ queryKey: ["maintenance"] });
+      qc.invalidateQueries({ queryKey: ["rooms"] });
+      qc.invalidateQueries({ queryKey: ["dashboard"] });
+      apiClient.notifications.create({
+        type: "maintenance",
+        title: "Maintenance Issue Reported",
+        message: `New repair ticket created: ${variables.issue || 'Facility issue'}`,
+      }).then(() => qc.invalidateQueries({ queryKey: ["notifications"] })).catch(() => {});
+      toast.success(t("maintenance.newTicket"));
+      setDialogOpen(false);
+      form.reset();
+    },
+    onError: (e: any) => toast.error(e?.response?.data?.error || t("housekeeping.toastFailed")),
   });
 
   const updateM = useMutation({
     mutationFn: ({ id, data }: any) => apiClient.maintenance.update(id, data),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["maintenance"] }); toast.success("Issue updated"); },
-    onError: () => toast.error("Failed to update"),
+    onSuccess: (_, variables) => {
+      qc.invalidateQueries({ queryKey: ["maintenance"] });
+      qc.invalidateQueries({ queryKey: ["rooms"] });
+      qc.invalidateQueries({ queryKey: ["dashboard"] });
+      const newStatus = (variables.data?.status || "updated").toUpperCase();
+      apiClient.notifications.create({
+        type: "maintenance",
+        title: "Maintenance Ticket Alert",
+        message: `Ticket #${variables.id} status updated to ${newStatus}`,
+      }).then(() => qc.invalidateQueries({ queryKey: ["notifications"] })).catch(() => {});
+      toast.success(t("maintenance.toastTicketUpdated"));
+    },
+    onError: () => toast.error(t("maintenance.toastFailedUpdate")),
   });
 
   const items = mainQ.data ?? [];
 
-  const openCount = items.filter((r: any) => r.status === "open").length;
-  const urgentCount = items.filter((r: any) => r.priority === "urgent" && r.status !== "resolved").length;
-  const inProgressCount = items.filter((r: any) => r.status === "in-progress").length;
-  const resolvedCount = items.filter((r: any) => r.status === "resolved").length;
-
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold">Maintenance</h1>
-          <p className="text-sm text-muted-foreground">Track and resolve facility issues</p>
+      {/* Top Header Hub */}
+      <div className="rounded-2xl bg-card border border-border p-5 flex flex-wrap items-center justify-between gap-4 shadow-sm">
+        <div className="flex items-center gap-3">
+          <div className="h-10 w-10 rounded-xl bg-pink-500/10 text-pink-600 flex items-center justify-center font-bold">
+            <Wrench className="h-5 w-5" />
+          </div>
+          <div>
+            <h1 className="text-xl font-bold">{t("maintenance.title")}</h1>
+            <p className="text-xs text-muted-foreground">{t("maintenance.subtitle")}</p>
+          </div>
         </div>
-        <Button onClick={() => { form.reset(); setDialogOpen(true); }} className="gap-2">
-          <Plus className="h-4 w-4" /> Report Issue
-        </Button>
+
+        <div className="flex items-center gap-3">
+          <Select value={filterStatus} onValueChange={setFilterStatus}>
+            <SelectTrigger className="w-36"><SelectValue placeholder={t("dashboard.allStatus")} /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">{t("dashboard.allStatus")}</SelectItem>
+              <SelectItem value="open">{t("maintenance.open").toUpperCase()}</SelectItem>
+              <SelectItem value="in-progress">{t("maintenance.inProgress").toUpperCase()}</SelectItem>
+              <SelectItem value="resolved">{t("maintenance.resolved").toUpperCase()}</SelectItem>
+            </SelectContent>
+          </Select>
+
+          <Button onClick={() => { form.reset(); setDialogOpen(true); }} className="gap-2 bg-sky-600 hover:bg-sky-700 text-white font-bold rounded-xl shadow-md cursor-pointer">
+            <Plus className="h-4 w-4" /> {t("maintenance.newTicket")}
+          </Button>
+        </div>
       </div>
 
-      {/* Summary */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        {[
-          { label: "Open Issues", value: openCount, color: "text-red-600", bg: "bg-red-50" },
-          { label: "Urgent", value: urgentCount, color: "text-amber-600", bg: "bg-amber-50" },
-          { label: "In Progress", value: inProgressCount, color: "text-blue-600", bg: "bg-blue-50" },
-          { label: "Resolved", value: resolvedCount, color: "text-green-600", bg: "bg-green-50" },
-        ].map(s => (
-          <div key={s.label} className={`rounded-xl ${s.bg} border p-4`}>
-            <div className={`text-2xl font-bold ${s.color}`}>{s.value}</div>
-            <div className="text-sm text-muted-foreground mt-1">{s.label}</div>
+      {/* Technician Ticket Cards Grid / Empty State */}
+      {items.length === 0 ? (
+        <div className="rounded-3xl border border-dashed border-border bg-card/60 p-12 text-center space-y-3">
+          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-sky-500/10 text-sky-600">
+            <Wrench className="h-7 w-7" />
           </div>
-        ))}
-      </div>
+          <h3 className="text-lg font-bold text-foreground">{t("maintenance.noActiveTickets")}</h3>
+          <p className="text-xs text-muted-foreground max-w-sm mx-auto">
+            {t("maintenance.allRoomsOperational")}
+          </p>
+        </div>
+      ) : (
+        <>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-5">
+          {items.slice((page - 1) * itemsPerPage, page * itemsPerPage).map((ticket: any) => {
+            const roomObj = getRoomForTicket(ticket.roomId, roomsQ.data ?? []);
+            const roomLabel = roomObj?.number || roomObj?.room_number || String(ticket.roomId || "1004");
+            const priority = (ticket.priority || "MEDIUM").toUpperCase();
+            const isUrgent = priority === "URGENT" || priority === "HIGH";
 
-      {/* Filters */}
-      <div className="flex items-center gap-3">
-        <Select value={filterStatus} onValueChange={setFilterStatus}>
-          <SelectTrigger className="w-40"><SelectValue placeholder="All Status" /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Status</SelectItem>
-            {Object.entries(STATUS_CONFIG).map(([k, v]) => <SelectItem key={k} value={k}>{v.label}</SelectItem>)}
-          </SelectContent>
-        </Select>
-        <Select value={filterPriority} onValueChange={setFilterPriority}>
-          <SelectTrigger className="w-40"><SelectValue placeholder="All Priority" /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Priority</SelectItem>
-            {Object.entries(PRIORITY_CONFIG).map(([k, v]) => <SelectItem key={k} value={k}>{v.label}</SelectItem>)}
-          </SelectContent>
-        </Select>
-      </div>
-
-      {/* Table */}
-      <Card>
-        <CardContent className="p-0">
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Room</TableHead>
-                  <TableHead>Issue</TableHead>
-                  <TableHead>Priority</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Reported</TableHead>
-                  <TableHead>Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {mainQ.isLoading ? (
-                  <TableRow><TableCell colSpan={6} className="text-center py-8 text-muted-foreground">Loading...</TableCell></TableRow>
-                ) : items.length === 0 ? (
-                  <TableRow><TableCell colSpan={6} className="text-center py-8 text-muted-foreground">No issues found</TableCell></TableRow>
-                ) : items.map((m: any) => {
-                  const pc = PRIORITY_CONFIG[m.priority] ?? PRIORITY_CONFIG["normal"];
-                  const sc = STATUS_CONFIG[m.status] ?? STATUS_CONFIG["open"];
-                  const PIcon = pc.icon;
-                  const roomLabel = m.roomId
-                    ? (roomsQ.data ?? []).find((r: any) => r.id === m.roomId)?.number
-                      ? `Room ${(roomsQ.data ?? []).find((r: any) => r.id === m.roomId)?.number}`
-                      : `#${m.roomId}`
-                    : "General";
-                  return (
-                    <TableRow key={m.id}>
-                      <TableCell className="font-medium">{roomLabel}</TableCell>
-                      <TableCell>
-                        <div className="max-w-xs">
-                          <p className="text-sm font-medium">{m.issue}</p>
-                          {m.notes && <p className="text-xs text-muted-foreground mt-0.5">{m.notes}</p>}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div className={`flex items-center gap-1.5 ${pc.color}`}>
-                          <PIcon className="h-3.5 w-3.5" />
-                          <span className="text-xs font-medium">{pc.label}</span>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${sc.bg} ${sc.color}`}>
-                          {sc.label}
+            return (
+              <div key={ticket.id} className="rounded-2xl border border-border/80 bg-card p-5 space-y-4 shadow-md flex flex-col justify-between">
+                <div className="space-y-3">
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-mono font-bold text-pink-600 bg-pink-500/10 px-2 py-0.5 rounded border border-pink-500/20">
+                          TKT-2026-00{ticket.id}
                         </span>
-                      </TableCell>
-                      <TableCell className="text-xs text-muted-foreground">
-                        {m.createdAt ? new Date(m.createdAt).toLocaleDateString() : "—"}
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-1">
-                          {m.status === "open" && (
-                            <Button size="sm" variant="outline" className="h-7 px-2 text-xs"
-                              onClick={() => updateM.mutate({ id: m.id, data: { status: "in-progress" } })}>
-                              Start
-                            </Button>
-                          )}
-                          {m.status === "in-progress" && (
-                            <Button size="sm" variant="outline" className="h-7 px-2 text-xs text-green-700"
-                              onClick={() => updateM.mutate({ id: m.id, data: { status: "resolved" } })}>
-                              Resolve
-                            </Button>
-                          )}
-                          {m.status === "resolved" && (
-                            <Button size="sm" variant="ghost" className="h-7 px-2 text-xs"
-                              onClick={() => updateM.mutate({ id: m.id, data: { status: "open" } })}>
-                              Reopen
-                            </Button>
-                          )}
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
+                        <span className="text-xs text-muted-foreground font-semibold">{t("roomDrawer.roomNumber", { number: roomLabel })}</span>
+                      </div>
+                      <h3 className="text-base font-extrabold text-foreground mt-2">{getLocalizedIssue(ticket.issue) || t("maintenance.placeholderIssue")}</h3>
+                    </div>
+
+                    <span className={`px-2.5 py-0.5 rounded-md text-[10px] font-extrabold uppercase tracking-wider ${
+                      isUrgent ? "bg-red-600 text-white" : "bg-sky-600 text-white"
+                    }`}>
+                      {priority}
+                    </span>
+                  </div>
+
+                  <div className="p-3.5 rounded-xl bg-accent/40 text-xs text-muted-foreground leading-relaxed">
+                    {(!ticket.notes || ticket.notes === "AC unit / hardware requires servicing and filter replacement.") ? t("maintenance.defaultNotes") : ticket.notes}
+                  </div>
+
+                  <div className="flex items-center justify-between text-xs pt-1">
+                    <div>
+                      <span className="text-muted-foreground">{t("maintenance.reportedBy")} </span>
+                      <span className="font-bold text-foreground">{t("maintenance.housekeeperStaff")}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="border-t border-border pt-3 space-y-3">
+                  {ticket.status === "in-progress" && (
+                    <div className="flex items-center justify-between p-2 rounded-xl bg-amber-500/10 border border-amber-500/20 text-xs font-bold text-amber-700 dark:text-amber-300">
+                      <span className="flex items-center gap-1.5">
+                        <span className="h-2 w-2 rounded-full bg-amber-500 animate-ping"></span> {t("maintenance.liveRepairTimer")}
+                      </span>
+                      <LiveStopwatch startTime={ticket.repairStartedAt} isPaused={false} accumulatedSeconds={ticket.accumulatedSeconds || 0} />
+                    </div>
+                  )}
+                  {ticket.status === "paused" && (
+                    <div className="flex items-center justify-between p-2 rounded-xl bg-slate-500/10 border border-slate-500/20 text-xs font-bold text-slate-700 dark:text-slate-300">
+                      <span className="flex items-center gap-1.5">
+                        <span className="h-2 w-2 rounded-full bg-slate-500"></span> {t("maintenance.repairPaused")}
+                      </span>
+                      <LiveStopwatch startTime={ticket.repairStartedAt} isPaused={true} accumulatedSeconds={ticket.accumulatedSeconds || 0} />
+                    </div>
+                  )}
+
+                  <div className="flex gap-2">
+                    {ticket.status === "open" && (
+                      <Button
+                        onClick={() => {
+                          if (typeof ticket.id === "string" && ticket.id.startsWith("maint-")) {
+                            const numericRoomId = Number(ticket.id.replace("maint-", ""));
+                            apiClient.maintenance.create({
+                              roomId: numericRoomId,
+                              issue: ticket.issue,
+                              priority: "high",
+                              status: "in-progress",
+                              repairStartedAt: new Date().toISOString(),
+                              accumulatedSeconds: 0,
+                            }).then(() => {
+                              qc.invalidateQueries({ queryKey: ["maintenance"] });
+                              toast.success(t("maintenance.toastRepairStarted"));
+                            });
+                          } else {
+                            updateM.mutate({
+                              id: ticket.id,
+                              data: { status: "in-progress", repairStartedAt: new Date().toISOString(), accumulatedSeconds: 0 },
+                            });
+                          }
+                        }}
+                        className="flex-1 bg-sky-600 hover:bg-sky-700 text-white font-bold rounded-xl shadow-md py-2.5"
+                      >
+                        ▶ {t("maintenance.startRepair")}
+                      </Button>
+                    )}
+
+                    {(ticket.status === "in-progress" || ticket.status === "paused") && (
+                      <Button
+                        onClick={() => {
+                          fireConfettiBlast();
+                          if (typeof ticket.id === "string" && ticket.id.startsWith("maint-")) {
+                            const numericRoomId = Number(ticket.id.replace("maint-", ""));
+                            updateRoomStatus(numericRoomId, "vacant");
+                            apiClient.rooms.update(String(numericRoomId), { status: "vacant", isAvailable: true })
+                              .then(() => {
+                                qc.invalidateQueries({ queryKey: ["rooms"] });
+                                qc.invalidateQueries({ queryKey: ["maintenance"] });
+                                toast.success(t("maintenance.toastRepairCompleted"));
+                              });
+                          } else {
+                            updateM.mutate({ id: ticket.id, data: { status: "resolved" } });
+                            if (ticket.roomId) {
+                              updateRoomStatus(Number(ticket.roomId), "vacant");
+                              apiClient.rooms.update(String(ticket.roomId), { status: "vacant", isAvailable: true }).then(() => {
+                                qc.invalidateQueries({ queryKey: ["rooms"] });
+                              });
+                            }
+                          }
+                        }}
+                        className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl shadow-md py-2.5"
+                      >
+                        ✓ {t("maintenance.completeRepair")}
+                      </Button>
+                    )}
+
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        const isCurrentlyPaused = ticket.status === "paused";
+                        const currentAcc = ticket.accumulatedSeconds || 0;
+                        const addedSecs = ticket.repairStartedAt
+                          ? Math.max(0, Math.floor((Date.now() - new Date(ticket.repairStartedAt).getTime()) / 1000))
+                          : 0;
+                        const totalAcc = isCurrentlyPaused ? currentAcc : currentAcc + addedSecs;
+
+                        if (isCurrentlyPaused) {
+                          updateM.mutate({
+                            id: ticket.id,
+                            data: {
+                              status: "in-progress",
+                              repairStartedAt: new Date().toISOString(),
+                              accumulatedSeconds: totalAcc,
+                            },
+                          });
+                          toast.info(t("maintenance.toastRepairResumed", { id: ticket.id }));
+                        } else {
+                          updateM.mutate({
+                            id: ticket.id,
+                            data: {
+                              status: "paused",
+                              accumulatedSeconds: totalAcc,
+                              repairStartedAt: new Date().toISOString(),
+                            },
+                          });
+                          toast.warning(t("maintenance.toastRepairPaused", { id: ticket.id }));
+                        }
+                      }}
+                      className="rounded-xl border-slate-300 dark:border-slate-700 px-4 font-semibold hover:bg-accent"
+                    >
+                      {ticket.status === "paused" ? `▶ ${t("maintenance.resume")}` : t("maintenance.pause")}
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
           </div>
-        </CardContent>
-      </Card>
+
+          {/* Pagination Controls */}
+          <div className="flex items-center justify-between mt-6 pt-4 border-t border-border text-xs text-muted-foreground">
+            <span>{t("maintenance.showingTickets", { start: Math.min(items.length, (page - 1) * itemsPerPage + 1), end: Math.min(items.length, page * itemsPerPage), total: items.length })}</span>
+            <div className="flex items-center gap-2">
+              <Button size="sm" variant="outline" onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}>{t("common.previous")}</Button>
+              <span className="text-xs font-bold text-foreground">{t("maintenance.pageIndicator", { page, pages: Math.ceil(items.length / itemsPerPage) || 1 })}</span>
+              <Button size="sm" variant="outline" onClick={() => setPage(p => p + 1)} disabled={page >= Math.ceil(items.length / itemsPerPage)}>{t("common.next")}</Button>
+            </div>
+          </div>
+        </>
+      )}
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-sm">
-          <DialogHeader><DialogTitle>Report Maintenance Issue</DialogTitle></DialogHeader>
+        <DialogContent className="max-w-md">
+          <DialogHeader><DialogTitle className="text-2xl font-bold text-slate-900">{t("maintenance.newTicket")}</DialogTitle></DialogHeader>
           <Form {...form}>
-            <form onSubmit={form.handleSubmit(d => createM.mutate(d))} className="grid gap-3">
+            <form onSubmit={form.handleSubmit(d => {
+              if (!d.roomId || d.roomId === "none") {
+                toast.error(t("maintenance.validationRoomLocation"));
+                return;
+              }
+              if (!d.issue || !d.issue.trim()) {
+                toast.error(t("maintenance.validationIssueRequired"));
+                return;
+              }
+              if (d.issue.trim().length < 3) {
+                toast.error(t("maintenance.validationIssueLength"));
+                return;
+              }
+              const payload = {
+                ...d,
+                roomId: Number(d.roomId),
+              };
+              createM.mutate(payload);
+            })} className="space-y-4 pt-2">
               <FormItem>
-                <FormLabel>Room</FormLabel>
+                <FormLabel className="font-semibold text-slate-800">{t("maintenance.roomLocation")}</FormLabel>
                 <FormControl>
-                  <Select value={form.watch("roomId")} onValueChange={v => form.setValue("roomId", v)}>
-                    <SelectTrigger><SelectValue placeholder="Select room (optional)" /></SelectTrigger>
+                  <Select value={form.watch("roomId") || "none"} onValueChange={v => form.setValue("roomId", v)}>
+                    <SelectTrigger><SelectValue placeholder={t("maintenance.selectRoomOptional")} /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">General / No Room</SelectItem>
+                      <SelectItem value="none">{t("maintenance.generalProperty")}</SelectItem>
                       {(roomsQ.data ?? []).map((r: any) => (
-                        <SelectItem key={r.id} value={String(r.id)}>Room {r.number}</SelectItem>
+                        <SelectItem key={r.id} value={String(r.id)}>{t("roomDrawer.roomNumber", { number: r.number || r.room_number })}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
                 </FormControl>
               </FormItem>
               <FormItem>
-                <FormLabel>Issue Description</FormLabel>
-                <FormControl><Input {...form.register("issue")} placeholder="Describe the issue..." required /></FormControl>
+                <FormLabel className="font-semibold text-slate-800">{t("maintenance.issueDescription")}</FormLabel>
+                <FormControl><Input placeholder={t("maintenance.placeholderIssue")} required {...form.register("issue")} /></FormControl>
               </FormItem>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-2 gap-4">
                 <FormItem>
-                  <FormLabel>Priority</FormLabel>
+                  <FormLabel className="font-semibold text-slate-800">{t("maintenance.priority")}</FormLabel>
                   <FormControl>
                     <Select value={form.watch("priority")} onValueChange={v => form.setValue("priority", v)}>
                       <SelectTrigger><SelectValue /></SelectTrigger>
                       <SelectContent>
-                        {Object.entries(PRIORITY_CONFIG).map(([k, v]) => <SelectItem key={k} value={k}>{v.label}</SelectItem>)}
+                        {Object.entries(PRIORITY_CONFIG).map(([k, v]) => <SelectItem key={k} value={k}>{t("maintenance." + k)}</SelectItem>)}
                       </SelectContent>
                     </Select>
                   </FormControl>
                 </FormItem>
                 <FormItem>
-                  <FormLabel>Status</FormLabel>
+                  <FormLabel className="font-semibold text-slate-800">{t("maintenance.status")}</FormLabel>
                   <FormControl>
                     <Select value={form.watch("status")} onValueChange={v => form.setValue("status", v)}>
                       <SelectTrigger><SelectValue /></SelectTrigger>
                       <SelectContent>
-                        {Object.entries(STATUS_CONFIG).map(([k, v]) => <SelectItem key={k} value={k}>{v.label}</SelectItem>)}
+                        {Object.entries(STATUS_CONFIG).map(([k, v]) => <SelectItem key={k} value={k}>{t("maintenance." + (k === "in-progress" ? "inProgress" : k))}</SelectItem>)}
                       </SelectContent>
                     </Select>
                   </FormControl>
                 </FormItem>
               </div>
               <FormItem>
-                <FormLabel>Additional Notes</FormLabel>
-                <FormControl><Input {...form.register("notes")} placeholder="Any additional details..." /></FormControl>
+                <FormLabel className="font-semibold text-slate-800">{t("maintenance.additionalNotes")}</FormLabel>
+                <FormControl><Input placeholder={t("maintenance.placeholderNotes")} {...form.register("notes")} /></FormControl>
               </FormItem>
-              <div className="flex gap-2 justify-end">
-                <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>Cancel</Button>
-                <Button type="submit" disabled={createM.isPending}>Report</Button>
+              <div className="flex gap-3 justify-end pt-4">
+                <Button type="button" variant="outline" className="h-11 rounded-2xl border-slate-200 bg-white hover:bg-slate-50 text-slate-700 font-medium px-6 shadow-2xs" onClick={() => setDialogOpen(false)}>
+                  {t("common.cancel")}
+                </Button>
+                <Button type="submit" className="h-11 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white font-semibold px-6 shadow-md shadow-blue-500/20" disabled={createM.isPending}>
+                  {createM.isPending ? t("common.submitting") : t("maintenance.reportIssue")}
+                </Button>
               </div>
             </form>
           </Form>

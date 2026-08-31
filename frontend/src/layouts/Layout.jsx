@@ -13,7 +13,11 @@ const links = [
 ];
 
 export default function Layout({ isLoggedIn, setIsLoggedIn }) {
+  const currentUser = JSON.parse(sessionStorage.getItem('innkeeper-user-info') || '{"fullName": "Admin User", "email": "admin@innkeeper.com"}');
+
   const handleLogout = () => {
+    sessionStorage.removeItem('innkeeper-session');
+    sessionStorage.removeItem('innkeeper-user-info');
     localStorage.removeItem('innkeeper-auth');
     setIsLoggedIn(false);
   };
@@ -43,9 +47,9 @@ export default function Layout({ isLoggedIn, setIsLoggedIn }) {
             ))}
           </nav>
           <div className="mt-auto rounded-2xl border border-violet-100 bg-violet-50/70 p-4">
-            <p className="text-sm font-semibold text-violet-700">Operations Center</p>
-            <p className="mt-1 text-xs leading-5 text-slate-500">Monitor channels, rooms, pricing, and guest activity from one place.</p>
-            <button onClick={handleLogout} className="mt-3 flex items-center gap-2 text-sm text-slate-600">
+            <p className="text-sm font-semibold text-violet-700">{currentUser.fullName || 'Admin User'}</p>
+            <p className="mt-1 text-xs text-slate-500 truncate">{currentUser.email}</p>
+            <button onClick={handleLogout} className="mt-3 flex items-center gap-2 text-sm text-rose-600 hover:text-rose-700 font-medium">
               <FiLogOut /> Logout
             </button>
           </div>
@@ -54,9 +58,9 @@ export default function Layout({ isLoggedIn, setIsLoggedIn }) {
           <div className="mb-4 flex items-center justify-between rounded-[22px] border border-violet-100 bg-white/80 p-4 shadow-sm backdrop-blur">
             <div>
               <p className="text-xs uppercase tracking-[0.3em] text-slate-400">Welcome Back</p>
-              <h2 className="text-lg font-semibold text-slate-800">Motel Admin Console</h2>
+              <h2 className="text-lg font-semibold text-slate-800">{currentUser.fullName || 'Motel Admin'} Console</h2>
             </div>
-            <button onClick={handleLogout} className="rounded-full bg-violet-600 px-3.5 py-2 text-sm font-medium text-white">Logout</button>
+            <button onClick={handleLogout} className="rounded-full bg-violet-600 px-4 py-2 text-sm font-medium text-white hover:bg-violet-700 transition">Logout</button>
           </div>
           <div className="rounded-[22px] border border-violet-100 bg-white/60 p-3 shadow-sm backdrop-blur sm:p-4">
             <Outlet />

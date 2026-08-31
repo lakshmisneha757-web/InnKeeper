@@ -27,7 +27,7 @@ import { getAnalytics } from '../controllers/analyticsController.js';
 import { getDashboard } from '../controllers/dashboardController.js';
 import { getWeather } from '../controllers/weatherController.js';
 import { getRoomAvailability } from '../controllers/roomAvailabilityController.js';
-import { createBookingWithPayment, verifyGuestId, generateDigitalLockKey, unlockDoor } from '../controllers/checkinController.js';
+import { createBookingWithPayment, verifyGuestId, processCheckInPayment, generateDigitalLockKey, unlockDoor, completeGuestCheckIn } from '../controllers/checkinController.js';
 
 const router = express.Router();
 
@@ -37,8 +37,10 @@ router.get('/health', (req, res) => res.json({ status: 'ok' }));
 // ─── Check-In & Digital Lock Key Generation ────────────────
 router.post('/checkin/book-with-payment', createBookingWithPayment);
 router.post('/checkin/verify-id', verifyGuestId);
+router.post('/checkin/process-payment', processCheckInPayment);
 router.post('/checkin/generate-lock-key', generateDigitalLockKey);
 router.post('/checkin/unlock-door', unlockDoor);
+router.post('/checkin/complete', completeGuestCheckIn);
 
 // ─── Auth ──────────────────────────────────────────────────
 router.post('/auth/signup', signup);

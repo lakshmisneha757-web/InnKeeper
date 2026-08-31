@@ -4,27 +4,25 @@ type Theme = "light" | "dark";
 
 interface ThemeContextType {
   theme: Theme;
-  toggleTheme?: () => void;
+  toggleTheme: () => void;
+  setTheme: (theme: Theme) => void;
   switchable: boolean;
 }
 
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 
-interface ThemeProviderProps {
-  children: React.ReactNode;
-  defaultTheme?: Theme;
-  switchable?: boolean;
-}
-
 export function ThemeProvider({
   children,
   defaultTheme = "light",
-  switchable = false,
-}: ThemeProviderProps) {
-  const [theme, setTheme] = useState<Theme>(() => {
-    if (switchable) {
-      const stored = localStorage.getItem("theme");
-      return (stored as Theme) || defaultTheme;
+}: {
+  children: React.ReactNode;
+  defaultTheme?: Theme;
+}) {
+  const [theme, setThemeState] = useState<Theme>(() => {
+    if (typeof window !== "undefined") {
+      const stored = localStorage.getItem("theme") as Theme;
+      if (stored === "dark" || stored === "light") return stored;
+      if (window.matchMedia("(prefers-color-scheme: dark)").matches) return "dark";
     }
     return defaultTheme;
   });
@@ -36,20 +34,19 @@ export function ThemeProvider({
     } else {
       root.classList.remove("dark");
     }
+    localStorage.setItem("theme", theme);
+  }, [theme]);
 
-    if (switchable) {
-      localStorage.setItem("theme", theme);
-    }
-  }, [theme, switchable]);
+  const toggleTheme = () => {
+    setThemeState((prev) => (prev === "dark" ? "light" : "dark"));
+  };
 
-  const toggleTheme = switchable
-    ? () => {
-        setTheme(prev => (prev === "light" ? "dark" : "light"));
-      }
-    : undefined;
+  const setTheme = (next: Theme) => {
+    setThemeState(next);
+  };
 
   return (
-    <ThemeContext.Provider value={{ theme, toggleTheme, switchable }}>
+    <ThemeContext.Provider value={{ theme, toggleTheme, setTheme, switchable: true }}>
       {children}
     </ThemeContext.Provider>
   );

@@ -38,7 +38,10 @@ import Module5Widgets from "@/components/dashboard/Module5Widgets";
 import { useTheme } from "@/contexts/ThemeContext";
 import { Skeleton } from "@/components/ui/skeleton";
 
+import { useTranslation } from "react-i18next";
+
 export default function Dashboard() {
+  const { t, i18n } = useTranslation();
   const {
     rooms, setRooms,
     filterType, setFilterType,
@@ -64,11 +67,11 @@ export default function Dashboard() {
   // Fetch data via REST API
   const [isLoading, setIsLoading] = useState(false);
 
-  const fetchAll = useCallback(async () => {
-    setIsLoading(true);
+  const fetchAll = useCallback(async (isInitial = false) => {
+    if (isInitial) setIsLoading(true);
     try {
       const [roomsResp, reservationsResp, guestsResp, notificationsResp] = await Promise.all([
-        apiClient.rooms.list(),
+        apiClient.rooms.list({ limit: 250 }),
         apiClient.reservations.list(),
         apiClient.guests.list(),
         apiClient.notifications.list(),
@@ -87,13 +90,13 @@ export default function Dashboard() {
     } catch (e) {
       console.warn("Failed to fetch dashboard data", e);
     } finally {
-      setIsLoading(false);
+      if (isInitial) setIsLoading(false);
     }
   }, [setRooms, setReservations, setGuests, setNotifications, setUnreadCount]);
 
   useEffect(() => {
-    fetchAll();
-    const interval = setInterval(fetchAll, 30000);
+    fetchAll(true);
+    const interval = setInterval(() => fetchAll(false), 15000);
     return () => clearInterval(interval);
   }, [fetchAll]);
 
@@ -134,14 +137,27 @@ export default function Dashboard() {
   };
 
   const statusLabels: Record<string, string> = {
-    vacant: "Vacant",
-    occupied: "Occupied",
-    dirty: "Dirty",
-    maintenance: "Maintenance",
-    reserved: "Reserved",
+    vacant: t("dashboard.vacant"),
+    occupied: t("dashboard.occupied"),
+    dirty: t("dashboard.dirty"),
+    maintenance: t("dashboard.maintenance"),
+    reserved: t("dashboard.reserved"),
   };
 
-  // `isLoading` from REST fetch
+  const getDashboardLocaleDate = () => {
+    const currentLang = i18n.language || "en";
+    const localeMap: Record<string, string> = { hi: "hi-IN", te: "te-IN", en: "en-US" };
+    try {
+      return new Date().toLocaleDateString(localeMap[currentLang] || "en-US", {
+        weekday: "long",
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+      });
+    } catch (e) {
+      return new Date().toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" });
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -150,16 +166,11 @@ export default function Dashboard() {
           <div>
             <div className="mb-2 flex items-center gap-2 text-sm font-medium text-sky-700">
               <Sparkles className="h-4 w-4" />
-              Luxury reception control center
+              {t("dashboard.subtitle")}
             </div>
-            <h1 className="text-2xl font-semibold tracking-tight text-slate-900">InnKeeper Hospitality Dashboard</h1>
+            <h1 className="text-2xl font-semibold tracking-tight text-slate-900">{t("dashboard.title")}</h1>
             <p className="mt-1 text-sm text-slate-600">
-              {new Date().toLocaleDateString("en-US", {
-                weekday: "long",
-                year: "numeric",
-                month: "long",
-                day: "numeric",
-              })}
+              {getDashboardLocaleDate()}
             </p>
           </div>
 
@@ -168,7 +179,7 @@ export default function Dashboard() {
             <Button
               variant="ghost"
               size="icon"
-              className="relative rounded-2xl"
+              className="relative rounded-2xl cursor-pointer"
               onClick={() => setShowNotifications(!showNotifications)}
             >
               {unreadCount > 0 ? <Bell className="h-5 w-5" /> : <BellOff className="h-5 w-5" />}
@@ -199,10 +210,10 @@ export default function Dashboard() {
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList className="grid w-full grid-cols-4 lg:w-auto lg:grid-cols-4">
-          <TabsTrigger value="overview">Overview</TabsTrigger>
-          <TabsTrigger value="tape-chart">Tape Chart</TabsTrigger>
-          <TabsTrigger value="rooms">Rooms</TabsTrigger>
-          <TabsTrigger value="arrivals">Arrivals</TabsTrigger>
+          <TabsTrigger value="overview">{t("dashboard.overview")}</TabsTrigger>
+          <TabsTrigger value="tape-chart">{t("dashboard.tapeChart")}</TabsTrigger>
+          <TabsTrigger value="rooms">{t("dashboard.rooms")}</TabsTrigger>
+          <TabsTrigger value="arrivals">{t("dashboard.arrivals")}</TabsTrigger>
         </TabsList>
 
         {/* Overview Tab */}
@@ -263,7 +274,7 @@ export default function Dashboard() {
                 <div className="flex items-center gap-4">
                   <CardTitle className="flex items-center gap-2 text-lg font-semibold">
                     <Calendar className="h-5 w-5 text-sky-600" />
-                    Tape Chart
+                    {t("dashboard.tapeChart")}
                   </CardTitle>
                   <div className="flex items-center gap-2">
                     <Button variant="outline" size="icon" onClick={() => navigateTapeChart(-7)}>
@@ -278,7 +289,7 @@ export default function Dashboard() {
                       <ChevronRight className="h-4 w-4" />
                     </Button>
                     <Button variant="ghost" size="sm" onClick={() => setTapeChartStartDate(new Date())}>
-                      Today
+                      {t("dashboard.today")}
                     </Button>
                   </div>
                 </div>
@@ -314,7 +325,7 @@ export default function Dashboard() {
                 <div className="relative max-w-md flex-1 min-w-50">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                   <Input
-                    placeholder="Search rooms or guests..."
+                    placeholder={t("dashboard.searchPlaceholder")}
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     className="pl-10"
@@ -333,10 +344,10 @@ export default function Dashboard() {
 
                 <Select value={filterType} onValueChange={(v) => setFilterType(v as any)}>
                   <SelectTrigger className="w-37.5">
-                    <SelectValue placeholder="All Types" />
+                    <SelectValue placeholder={t("dashboard.allTypes")} />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">All Types</SelectItem>
+                    <SelectItem value="all">{t("dashboard.allTypes")}</SelectItem>
                     <SelectItem value="standard">Standard</SelectItem>
                     <SelectItem value="deluxe">Deluxe</SelectItem>
                     <SelectItem value="suite">Suite</SelectItem>
@@ -350,28 +361,28 @@ export default function Dashboard() {
                   onValueChange={(v) => setFilterFloor(v === "all" ? null : Number(v))}
                 >
                   <SelectTrigger className="w-30">
-                    <SelectValue placeholder="All Floors" />
+                    <SelectValue placeholder={t("dashboard.allFloors")} />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">All Floors</SelectItem>
-                    <SelectItem value="1">Floor 1</SelectItem>
-                    <SelectItem value="2">Floor 2</SelectItem>
-                    <SelectItem value="3">Floor 3</SelectItem>
-                    <SelectItem value="4">Floor 4</SelectItem>
+                    <SelectItem value="all">{t("dashboard.allFloors")}</SelectItem>
+                    <SelectItem value="1">{t("dashboard.floor", { floor: 1 })}</SelectItem>
+                    <SelectItem value="2">{t("dashboard.floor", { floor: 2 })}</SelectItem>
+                    <SelectItem value="3">{t("dashboard.floor", { floor: 3 })}</SelectItem>
+                    <SelectItem value="4">{t("dashboard.floor", { floor: 4 })}</SelectItem>
                   </SelectContent>
                 </Select>
 
                 <Select value={filterStatus} onValueChange={(v) => setFilterStatus(v as any)}>
                   <SelectTrigger className="w-37.5">
-                    <SelectValue placeholder="All Status" />
+                    <SelectValue placeholder={t("dashboard.allStatus")} />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">All Status</SelectItem>
-                    <SelectItem value="vacant">Vacant</SelectItem>
-                    <SelectItem value="occupied">Occupied</SelectItem>
-                    <SelectItem value="dirty">Dirty</SelectItem>
-                    <SelectItem value="maintenance">Maintenance</SelectItem>
-                    <SelectItem value="reserved">Reserved</SelectItem>
+                    <SelectItem value="all">{t("dashboard.allStatus")}</SelectItem>
+                    <SelectItem value="vacant">{t("dashboard.vacant")}</SelectItem>
+                    <SelectItem value="occupied">{t("dashboard.occupied")}</SelectItem>
+                    <SelectItem value="dirty">{t("dashboard.dirty")}</SelectItem>
+                    <SelectItem value="maintenance">{t("dashboard.maintenance")}</SelectItem>
+                    <SelectItem value="reserved">{t("dashboard.reserved")}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>

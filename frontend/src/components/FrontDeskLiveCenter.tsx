@@ -113,35 +113,35 @@ export const FrontDeskLiveCenter: React.FC = () => {
             <span className="text-xs text-slate-400">Click room for front desk quick toggle</span>
           </div>
 
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <div className="grid grid-cols-[repeat(auto-fill,minmax(130px,1fr))] gap-3">
             {rooms.map((room) => (
               <div
                 key={room.id}
-                className={`p-3.5 rounded-2xl border transition-all flex flex-col justify-between ${getStatusColor(
+                className={`p-3 rounded-2xl border transition-all flex flex-col justify-between overflow-hidden ${getStatusColor(
                   room.status
                 )}`}
               >
                 <div>
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="font-extrabold text-base text-white">{room.roomNumber}</span>
-                    <span className="text-[10px] opacity-80 uppercase font-mono">{room.status.replace('_', ' ')}</span>
+                  <div className="flex items-center justify-between mb-1 gap-1">
+                    <span className="font-extrabold text-base text-white truncate">{room.roomNumber}</span>
+                    <span className="text-[9px] opacity-80 uppercase font-mono truncate max-w-[65px]">{room.status.replace('_', ' ')}</span>
                   </div>
                   <p className="text-[11px] opacity-90 truncate">{room.roomType}</p>
                 </div>
 
-                <div className="mt-3 pt-2 border-t border-white/10 flex items-center justify-between text-[10px]">
-                  <span>F{room.floor} • {room.building.split(' ')[0]}</span>
+                <div className="mt-3 pt-2 border-t border-white/10 flex items-center justify-between text-[10px] gap-1">
+                  <span className="truncate">F{room.floor} • {room.building.split(' ')[0]}</span>
                   {room.status === 'CLEAN' ? (
                     <button
                       onClick={() => markRoomDirty(room.id)}
-                      className="hover:underline font-bold text-rose-300"
+                      className="hover:underline font-bold text-rose-300 shrink-0"
                     >
                       Set Dirty
                     </button>
                   ) : (
                     <button
                       onClick={() => markRoomClean(room.id)}
-                      className="hover:underline font-bold text-emerald-300"
+                      className="hover:underline font-bold text-emerald-300 shrink-0"
                     >
                       Set Clean
                     </button>
@@ -150,6 +150,7 @@ export const FrontDeskLiveCenter: React.FC = () => {
               </div>
             ))}
           </div>
+
         </div>
 
         {/* Real-time Socket Activity Stream (Right Column) */}

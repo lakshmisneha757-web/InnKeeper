@@ -1,5 +1,5 @@
 import axios from "axios";
-import { COOKIE_NAME } from "@/const";
+
 
 const api = axios.create({
   baseURL: "/api",
@@ -7,22 +7,12 @@ const api = axios.create({
   withCredentials: true,
 });
 
-// Attach Authorization header from sessionStorage mirror (same logic as trpc client)
+// Attach Authorization header from localStorage (remember me) or sessionStorage (session-only)
 api.interceptors.request.use((config) => {
   try {
-    let token: string | undefined;
-    const raw = sessionStorage.getItem("manus-cookie");
-    if (raw) {
-      const prefix = `${COOKIE_NAME}=`;
-      const pair = raw.split(";").find((s) => s.trim().startsWith(prefix));
-      token = pair?.trim().slice(prefix.length);
-    }
-    // Fallback: read document.cookie directly (normal OAuth cookie flow)
-    if (!token && typeof document !== "undefined") {
-      const prefix = `${COOKIE_NAME}=`;
-      const pair = document.cookie.split(";").find((s) => s.trim().startsWith(prefix));
-      token = pair?.trim().slice(prefix.length);
-    }
+    const token: string | null =
+      localStorage.getItem("innkeeper_token") ||
+      sessionStorage.getItem("innkeeper_session_token");
     if (token) {
       config.headers = { ...(config.headers ?? {}), Authorization: `Bearer ${token}` } as any;
     }

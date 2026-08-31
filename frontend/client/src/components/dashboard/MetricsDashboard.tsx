@@ -2,7 +2,7 @@ import { useMemo } from "react";
 import { motion } from "framer-motion";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Bed, DollarSign, TrendingUp, BarChart3, Sparkles, ArrowUpRight } from "lucide-react";
+import { Bed, IndianRupee, TrendingUp, BarChart3, Sparkles, ArrowUpRight } from "lucide-react";
 import {
   BarChart,
   Bar,
@@ -14,6 +14,7 @@ import {
   AreaChart,
   Area,
 } from "recharts";
+import { useTranslation } from "react-i18next";
 
 interface Room {
   id: number;
@@ -42,6 +43,7 @@ interface MetricsDashboardProps {
 }
 
 export default function MetricsDashboard({ rooms, reservations }: MetricsDashboardProps) {
+  const { t } = useTranslation();
   const metrics = useMemo(() => {
     const totalRooms = rooms.length;
     const occupiedRooms = rooms.filter((r) => r.status === "occupied").length;
@@ -122,40 +124,43 @@ export default function MetricsDashboard({ rooms, reservations }: MetricsDashboa
       variants={container}
       initial="hidden"
       animate="show"
-      className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4"
+      className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5"
     >
       {[
         {
-          title: "Occupancy",
+          title: t("dashboard.occupancy"),
           value: `${metrics.occupancyRate}%`,
-          detail: `${metrics.occupiedRooms} of ${metrics.totalRooms} rooms occupied`,
+          detail: t("dashboard.occupancyDetail", { occupied: metrics.occupiedRooms, total: metrics.totalRooms }),
           icon: Bed,
           accent: "from-sky-500/15 to-blue-500/5",
           tint: "text-sky-600",
           progress: metrics.occupancyRate,
         },
         {
-          title: "Today's revenue",
-          value: `$${metrics.adr.toFixed(0)}`,
-          detail: "Average Daily Rate",
-          icon: DollarSign,
+          title: t("dashboard.todayRevenue"),
+          value: `₹${metrics.adr.toFixed(0)}`,
+          detail: t("dashboard.averageDailyRate"),
+          icon: IndianRupee,
           accent: "from-emerald-500/15 to-teal-500/5",
           tint: "text-emerald-600",
           progress: Math.min(metrics.adr / 180, 100),
         },
         {
-          title: "RevPAR",
-          value: `$${metrics.revpar.toFixed(0)}`,
-          detail: "Revenue per available room",
+          title: t("dashboard.revPar"),
+          value: `₹${metrics.revpar.toFixed(0)}`,
+          detail: t("dashboard.revenuePerAvailableRoom"),
           icon: TrendingUp,
           accent: "from-violet-500/15 to-fuchsia-500/5",
           tint: "text-violet-600",
           progress: Math.min(metrics.revpar / 220, 100),
         },
         {
-          title: "Rooms",
+          title: t("dashboard.rooms"),
           value: `${metrics.totalRooms}`,
-          detail: `${rooms.filter((r) => r.status === "vacant").length} vacant · ${metrics.occupiedRooms} occupied`,
+          detail: t("dashboard.roomSummaryDetail", {
+            vacant: rooms.filter((r) => r.status === "vacant").length,
+            occupied: metrics.occupiedRooms,
+          }),
           icon: BarChart3,
           accent: "from-amber-500/15 to-orange-500/5",
           tint: "text-amber-600",
@@ -195,10 +200,10 @@ export default function MetricsDashboard({ rooms, reservations }: MetricsDashboa
         <Card className="overflow-hidden">
           <CardHeader className="pb-2">
             <div className="flex items-center justify-between">
-              <CardTitle className="text-sm font-medium">Weekly occupancy trend</CardTitle>
+              <CardTitle className="text-sm font-medium">{t("dashboard.weeklyOccupancyTrend")}</CardTitle>
               <div className="flex items-center gap-2 rounded-full bg-sky-50 px-2.5 py-1 text-xs font-medium text-sky-700">
                 <Sparkles className="h-3.5 w-3.5" />
-                Live outlook
+                {t("dashboard.liveOutlook")}
               </div>
             </div>
           </CardHeader>
@@ -241,7 +246,7 @@ export default function MetricsDashboard({ rooms, reservations }: MetricsDashboa
         <Card className="overflow-hidden">
           <CardHeader className="pb-2">
             <div className="flex items-center justify-between">
-              <CardTitle className="text-sm font-medium">ADR performance</CardTitle>
+              <CardTitle className="text-sm font-medium">{t("dashboard.adrPerformance")}</CardTitle>
               <div className="flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700">
                 <ArrowUpRight className="h-3.5 w-3.5" />
                 Up 8.2%
@@ -254,8 +259,9 @@ export default function MetricsDashboard({ rooms, reservations }: MetricsDashboa
                 <BarChart data={weeklyData} margin={{ top: 5, right: 5, left: -10, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                   <XAxis dataKey="day" tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" />
-                  <YAxis tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" domain={[0, 'auto']} unit="$" />
+                  <YAxis tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" domain={[0, 'auto']} tickFormatter={(value) => `₹${value}`} />
                   <Tooltip
+                    formatter={(value: any) => [`₹${value}`, 'ADR']}
                     contentStyle={{
                       backgroundColor: "hsl(var(--card))",
                       border: "1px solid hsl(var(--border))",

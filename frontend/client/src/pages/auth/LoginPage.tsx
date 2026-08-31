@@ -1,5 +1,5 @@
 import { AnimatePresence, motion } from 'framer-motion';
-import { Eye, EyeOff, Loader2, Lock, Mail, Sparkles, DoorOpen } from 'lucide-react';
+import { Eye, EyeOff, Loader2, Lock, Mail, Sparkles, DoorOpen, UserCheck } from 'lucide-react';
 import { FormEvent, useEffect, useState } from 'react';
 import { Link, useLocation } from 'wouter';
 import { toast } from 'sonner';
@@ -7,26 +7,18 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useAuthContext } from '@/contexts/AuthContext';
 
 export default function LoginPage() {
   const [, setLocation] = useLocation();
-  const { login, loading, isAuthenticated } = useAuthContext();
+  const { login, loading, isAuthenticated, user, logout } = useAuthContext();
   const [showPassword, setShowPassword] = useState(false);
+  const [role, setRole] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [rememberMe, setRememberMe] = useState(true);
   const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
-
-  const validate = () => {
-    const nextErrors: { email?: string; password?: string } = {};
-    if (!email.trim()) nextErrors.email = 'Email is required.';
-    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) nextErrors.email = 'Enter a valid email.';
-    if (!password.trim()) nextErrors.password = 'Password is required.';
-    else if (password.length < 8) nextErrors.password = 'Use at least 8 characters.';
-    setErrors(nextErrors);
-    return Object.keys(nextErrors).length === 0;
-  };
 
   useEffect(() => {
     if (isAuthenticated) {
@@ -34,9 +26,25 @@ export default function LoginPage() {
     }
   }, [isAuthenticated, setLocation]);
 
-  if (isAuthenticated) {
-    return null;
-  }
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const prefilledEmail = params.get('email');
+    if (prefilledEmail) {
+      setEmail(prefilledEmail);
+    }
+  }, []);
+
+  const validate = () => {
+    const nextErrors: { email?: string; password?: string } = {};
+    const emailRegex = /^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/;
+    if (!email.trim()) nextErrors.email = 'Email is required.';
+    else if (!emailRegex.test(email.trim())) nextErrors.email = 'Please enter a valid email address (e.g. username@domain.com).';
+    if (!password.trim()) nextErrors.password = 'Password is required.';
+    setErrors(nextErrors);
+    return Object.keys(nextErrors).length === 0;
+  };
+
+
 
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
@@ -46,7 +54,7 @@ export default function LoginPage() {
       toast.success('Welcome back! Redirecting to your dashboard.');
       setLocation('/');
     } catch (err: any) {
-      toast.error(err?.response?.data?.error || 'Login failed.');
+      toast.error(err?.response?.data?.error || err?.message || 'Invalid email address or password.');
     }
   };
 
@@ -82,11 +90,42 @@ export default function LoginPage() {
               </div>
 
               <form onSubmit={handleSubmit} className="space-y-4">
+                {/* Select Role Option */}
+                <div className="space-y-2">
+                  <Label htmlFor="role">Sign In Role</Label>
+                  <Select
+                    value={role}
+                    onValueChange={(val) => {
+                      setRole(val);
+                      if (val === 'admin') {
+                        setEmail('admin@innkeeper.com');
+                        setPassword('admin123');
+                      } else if (val === 'manager') {
+                        setEmail('manager@innkeeper.com');
+                        setPassword('manager123');
+                      } else if (val === 'receptionist') {
+                        setEmail('staff@innkeeper.com');
+                        setPassword('staff123');
+                      }
+                      setErrors({});
+                    }}
+                  >
+                    <SelectTrigger id="role" className="rounded-2xl border-stone-200 bg-white">
+                      <SelectValue placeholder="Choose a Role (Admin, Manager, Staff)" />
+                    </SelectTrigger>
+                    <SelectContent className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xl rounded-2xl z-[9999]">
+                      <SelectItem value="admin" className="cursor-pointer font-medium">Admin (admin@innkeeper.com)</SelectItem>
+                      <SelectItem value="manager" className="cursor-pointer font-medium">Manager (manager@innkeeper.com)</SelectItem>
+                      <SelectItem value="receptionist" className="cursor-pointer font-medium">Receptionist / Staff (staff@innkeeper.com)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
                 <div className="space-y-2">
                   <Label htmlFor="email">Email</Label>
                   <div className="relative">
                     <Mail className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                    <Input id="email" type="email" placeholder="you@innkeeper.com" value={email} onChange={(e) => { setEmail(e.target.value); setErrors((prev) => ({ ...prev, email: undefined })); }} className="pl-10" autoComplete="email" />
+                    <Input id="email" type="email" placeholder="you@innkeeper.com" value={email} onChange={(e) => { setEmail(e.target.value); setErrors((prev) => ({ ...prev, email: undefined })); }} className="pl-10 rounded-2xl" autoComplete="email" />
                   </div>
                   <AnimatePresence mode="wait">
                     {errors.email ? <motion.p initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="text-sm text-red-500">{errors.email}</motion.p> : null}
@@ -97,7 +136,7 @@ export default function LoginPage() {
                   <Label htmlFor="password">Password</Label>
                   <div className="relative">
                     <Lock className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                    <Input id="password" type={showPassword ? 'text' : 'password'} placeholder="Enter your password" value={password} onChange={(e) => { setPassword(e.target.value); setErrors((prev) => ({ ...prev, password: undefined })); }} className="pl-10 pr-10" autoComplete="current-password" />
+                    <Input id="password" type={showPassword ? 'text' : 'password'} placeholder="Enter your password" value={password} onChange={(e) => { setPassword(e.target.value); setErrors((prev) => ({ ...prev, password: undefined })); }} className="pl-10 pr-10 rounded-2xl" autoComplete="current-password" />
                     <button type="button" onClick={() => setShowPassword((prev) => !prev)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700">
                       {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                     </button>
@@ -108,24 +147,20 @@ export default function LoginPage() {
                 </div>
 
                 <div className="flex items-center justify-between">
-                  <label className="flex items-center gap-2 text-sm text-slate-600">
+                  <label className="flex items-center gap-2 text-sm text-slate-600 cursor-pointer">
                     <Checkbox checked={rememberMe} onCheckedChange={(checked) => setRememberMe(Boolean(checked))} />
                     <span>Remember me</span>
                   </label>
                   <Link href="/forgot-password" className="text-sm font-medium text-[#2f6c85] hover:text-[#24596d]">Forgot Password?</Link>
                 </div>
 
-                <Button type="submit" className="w-full rounded-2xl bg-[#2f6c85] text-white hover:bg-[#255a6d]" disabled={loading}>
+                <Button type="submit" className="w-full rounded-2xl bg-[#2f6c85] text-white hover:bg-[#255a6d] py-5 font-semibold" disabled={loading}>
                   {loading ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Signing in...</> : 'Login'}
-                </Button>
-
-                <Button type="button" variant="outline" className="w-full rounded-2xl border-[#d8e8e4] text-[#2f6c85] hover:bg-[#f2f8f6]" onClick={() => setLocation('/signup')}>
-                  Sign Up
                 </Button>
               </form>
 
               <p className="mt-6 text-center text-sm text-slate-600">
-                New here? <Link href="/signup" className="font-semibold text-[#2f6c85]">Create an account</Link>
+                New here? <Link href="/signup" className="font-semibold text-[#2f6c85] hover:underline">Create an account</Link>
               </p>
             </div>
           </div>

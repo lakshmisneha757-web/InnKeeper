@@ -8,6 +8,7 @@ import { UserPlus, LogOut, Calendar, Loader2, Sparkles } from "lucide-react";
 import { useStore } from "@/lib/store";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
+import { useTranslation } from "react-i18next";
 
 interface Room {
   id: number;
@@ -42,6 +43,7 @@ interface ArrivalsDeparturesProps {
 }
 
 export default function ArrivalsDepartures({ rooms, reservations, guests }: ArrivalsDeparturesProps) {
+  const { t } = useTranslation();
   const { updateRoomStatus, setSelectedRoom } = useStore();
   const utils = trpc.useUtils();
 
@@ -56,14 +58,16 @@ export default function ArrivalsDepartures({ rooms, reservations, guests }: Arri
   const todayArrivals = useMemo(() => {
     return reservations.filter((r) => {
       const ci = new Date(r.checkIn);
-      return ci.toDateString() === today.toDateString() && (r.status === "confirmed" || r.status === "checked_in");
+      const status = (r.status || '').toLowerCase();
+      return ci.toDateString() === today.toDateString() && (status === "confirmed" || status === "checked_in");
     });
   }, [reservations]);
 
   const todayDepartures = useMemo(() => {
     return reservations.filter((r) => {
       const co = new Date(r.checkOut);
-      return co.toDateString() === today.toDateString() && r.status === "checked_in";
+      const status = (r.status || '').toLowerCase();
+      return co.toDateString() === today.toDateString() && status === "checked_in";
     });
   }, [reservations]);
 
@@ -130,7 +134,7 @@ export default function ArrivalsDepartures({ rooms, reservations, guests }: Arri
             <div className="flex h-8 w-8 items-center justify-center rounded-2xl bg-emerald-500/10 text-emerald-600">
               <UserPlus className="h-4 w-4" />
             </div>
-            Today's Arrivals
+            {t("dashboard.todaysArrivals")}
             <Badge variant="secondary" className="ml-auto text-xs">
               {todayArrivals.length}
             </Badge>
@@ -139,7 +143,7 @@ export default function ArrivalsDepartures({ rooms, reservations, guests }: Arri
         <CardContent className="space-y-2">
           {todayArrivals.length === 0 ? (
             <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50/70 py-6 text-center text-sm text-muted-foreground">
-              No arrivals today
+              {t("dashboard.noArrivalsToday")}
             </div>
           ) : (
             todayArrivals.map((res, i) => {
@@ -159,26 +163,9 @@ export default function ArrivalsDepartures({ rooms, reservations, guests }: Arri
                       {guest ? `${guest.firstName} ${guest.lastName}` : "Guest"}
                     </p>
                     <p className="text-xs text-muted-foreground">
-                      Room {room?.number || "TBD"} · Check-in
+                      {t("roomDrawer.roomNumber", { number: room?.number || "TBD" })}
                     </p>
                   </div>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="text-xs"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleCheckIn(res);
-                    }}
-                    disabled={checkInMutation.isPending || res.status === "checked_in"}
-                  >
-                    {checkInMutation.isPending ? (
-                      <Loader2 className="h-3 w-3 mr-1 animate-spin" />
-                    ) : (
-                      <Calendar className="h-3 w-3 mr-1" />
-                    )}
-                    {res.status === "checked_in" ? "Done" : "Check-in"}
-                  </Button>
                 </motion.div>
               );
             })
@@ -194,7 +181,7 @@ export default function ArrivalsDepartures({ rooms, reservations, guests }: Arri
             <div className="flex h-8 w-8 items-center justify-center rounded-2xl bg-amber-500/10 text-amber-600">
               <LogOut className="h-4 w-4" />
             </div>
-            Today's Departures
+            {t("dashboard.todaysDepartures")}
             <Badge variant="secondary" className="ml-auto text-xs">
               {todayDepartures.length}
             </Badge>
@@ -203,7 +190,7 @@ export default function ArrivalsDepartures({ rooms, reservations, guests }: Arri
         <CardContent className="space-y-2">
           {todayDepartures.length === 0 ? (
             <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50/70 py-6 text-center text-sm text-muted-foreground">
-              No departures today
+              {t("dashboard.noDeparturesToday")}
             </div>
           ) : (
             todayDepartures.map((res, i) => {
@@ -223,7 +210,7 @@ export default function ArrivalsDepartures({ rooms, reservations, guests }: Arri
                       {guest ? `${guest.firstName} ${guest.lastName}` : "Guest"}
                     </p>
                     <p className="text-xs text-muted-foreground">
-                      Room {room?.number || "TBD"} · Check-out
+                      {t("roomDrawer.roomNumber", { number: room?.number || "TBD" })} · {t("reservations.checkedOut")}
                     </p>
                   </div>
                   <Button
@@ -241,7 +228,7 @@ export default function ArrivalsDepartures({ rooms, reservations, guests }: Arri
                     ) : (
                       <LogOut className="h-3 w-3 mr-1" />
                     )}
-                    Check-out
+                    {t("reservations.checkedOut")}
                   </Button>
                 </motion.div>
               );

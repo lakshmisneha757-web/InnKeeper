@@ -23,9 +23,12 @@ export async function listMaintenance(req, res) {
 
 export async function createMaintenance(req, res) {
   try {
+    if (!req.body.issue || !String(req.body.issue).trim()) {
+      return res.status(400).json({ error: 'Issue description is required' });
+    }
     const item = await prisma.maintenance.create({ data: {
       roomId: req.body.roomId ? Number(req.body.roomId) : null,
-      issue: req.body.issue,
+      issue: String(req.body.issue).trim(),
       priority: req.body.priority || 'normal',
       status: req.body.status || 'open',
       notes: req.body.notes || null

@@ -125,10 +125,10 @@ export default function ReportsPage() {
     const adr = filteredBookings.length ? Math.round(revenue / Math.max(filteredBookings.length, 1)) : 0;
     const revpar = Math.round((occupancyRate / 100) * adr);
     return [
-      { title: 'Total Revenue', value: `$${revenue.toLocaleString()}`, icon: FiDollarSign, accent: 'bg-emerald-100' },
+      { title: 'Total Revenue', value: `₹${revenue.toLocaleString()}`, icon: FiDollarSign, accent: 'bg-emerald-100' },
       { title: 'Occupancy Rate', value: `${occupancyRate}%`, icon: FiTrendingUp, accent: 'bg-violet-100' },
-      { title: 'ADR', value: `$${adr}`, icon: FiBarChart2, accent: 'bg-amber-100' },
-      { title: 'RevPAR', value: `$${revpar}`, icon: FiBarChart2, accent: 'bg-sky-100' },
+      { title: 'ADR', value: `₹${adr}`, icon: FiBarChart2, accent: 'bg-amber-100' },
+      { title: 'RevPAR', value: `₹${revpar}`, icon: FiBarChart2, accent: 'bg-sky-100' },
       { title: 'Total Bookings', value: filteredBookings.length, icon: FiCalendar, accent: 'bg-fuchsia-100' },
       { title: 'Channel-wise Bookings', value: `${filteredChannels.filter((channel) => channel.connected).length}/${filteredChannels.length}`, icon: FiBarChart2, accent: 'bg-rose-100' }
     ];

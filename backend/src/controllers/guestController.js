@@ -12,6 +12,11 @@ export async function listGuests(req, res) {
   try {
     const { page = 1, limit = 50, q = '' } = req.query;
     const guests = await prisma.guest.findMany({
+      where: {
+        reservations: {
+          some: {}
+        }
+      },
       include: { reservations: true },
       orderBy: { createdAt: 'desc' }
     });
@@ -24,8 +29,41 @@ export async function listGuests(req, res) {
   }
 }
 
+function validateServerGuest(data) {
+  if (data.firstName !== undefined) {
+    const fn = String(data.firstName || '').trim();
+    if (!fn || fn.length < 2 || !/^[A-Za-z\s'\-]+$/.test(fn)) {
+      return 'First Name must contain at least 2 alphabetic characters.';
+    }
+  }
+  if (data.lastName !== undefined) {
+    const ln = String(data.lastName || '').trim();
+    if (!ln || !/^[A-Za-z\s'\-]+$/.test(ln)) {
+      return 'Last Name must contain only alphabetic characters.';
+    }
+  }
+  if (data.email) {
+    const em = String(data.email).trim();
+    const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9-]+\.[a-zA-Z]{2,}$/;
+    const parts = em.split('@');
+    if (!emailRegex.test(em) || parts.length !== 2 || parts[1].startsWith('.') || parts[1].endsWith('.') || parts[1].includes('..')) {
+      return 'Please provide a valid email address (e.g. guest@example.com).';
+    }
+  }
+  if (data.phone) {
+    const cleanPhone = String(data.phone).replace(/\D/g, '');
+    if (cleanPhone.length !== 10 || !/^[6-9]\d{9}$/.test(cleanPhone) || /^(\d)\1{9}$/.test(cleanPhone) || cleanPhone === '1234567890') {
+      return 'Please provide a valid 10-digit mobile phone number.';
+    }
+  }
+  return null;
+}
+
 export async function createGuest(req, res) {
   try {
+    const err = validateServerGuest(req.body);
+    if (err) return res.status(400).json({ error: err });
+
     const guest = await prisma.guest.create({ data: req.body });
     res.status(201).json(guest);
   } catch (err) {
@@ -35,6 +73,9 @@ export async function createGuest(req, res) {
 
 export async function updateGuest(req, res) {
   try {
+    const err = validateServerGuest(req.body);
+    if (err) return res.status(400).json({ error: err });
+
     const guest = await prisma.guest.update({ where: { id: Number(req.params.id) }, data: req.body });
     res.json(guest);
   } catch (err) {

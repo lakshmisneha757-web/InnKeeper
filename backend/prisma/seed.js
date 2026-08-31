@@ -29,25 +29,24 @@ async function main() {
     prisma.roomType.upsert({ where: { name: 'Premium' }, update: {}, create: { name: 'Premium', base_price: 4000, capacity: 2, description: 'Executive room with work desk, premium bedding, lounge access' } }),
   ]);
 
-  // ─── Rooms (40 rooms across 4 floors) ────────────────────
+  // ─── Rooms (150 rooms across 15 floors, numbered 1 to 150) ──
   const statuses = ['vacant', 'occupied', 'dirty', 'maintenance', 'reserved'];
   const roomData = [];
-  for (let floor = 1; floor <= 4; floor++) {
-    for (let num = 1; num <= 10; num++) {
-      const roomNum = `${floor}0${num.toString().padStart(2, '0')}`;
-      const typeIdx = (num - 1) % 5;
-      const statusIdx = Math.floor(Math.random() * statuses.length);
-      const rt = roomTypes[typeIdx];
-      roomData.push({
-        room_number: roomNum,
-        room_type_id: rt.id,
-        floor,
-        status: statuses[statusIdx],
-        current_price: rt.base_price + Math.floor(Math.random() * 500),
-        availability: statuses[statusIdx] === 'vacant',
-        hotel_id: hotel.id,
-      });
-    }
+  for (let i = 1; i <= 150; i++) {
+    const roomNum = `${i}`;
+    const floor = Math.floor((i - 1) / 10) + 1;
+    const typeIdx = (i - 1) % roomTypes.length;
+    const statusIdx = i % statuses.length;
+    const rt = roomTypes[typeIdx];
+    roomData.push({
+      room_number: roomNum,
+      room_type_id: rt.id,
+      floor,
+      status: statuses[statusIdx],
+      current_price: rt.base_price,
+      availability: statuses[statusIdx] === 'vacant',
+      hotel_id: hotel.id,
+    });
   }
 
   // Delete existing rooms if any to avoid conflicts
@@ -172,18 +171,7 @@ async function main() {
           amount: rd.paid,
           method: paymentMethods[i % paymentMethods.length],
           paymentStatus: rd.status === 'cancelled' ? 'Refunded' : 'Paid',
-          notes: `Payment for reservation #${r.id}`,
-        },
-      });
-    }
-    if (rd.charges - rd.paid > 0 && rd.status !== 'cancelled') {
-      await prisma.payment.create({
-        data: {
-          reservationId: r.id,
-          amount: rd.charges - rd.paid,
-          method: 'Credit Card',
-          paymentStatus: 'Pending',
-          notes: 'Balance payment due at checkout',
+          notes: `Check-in payment collected for reservation #${r.id}`,
         },
       });
     }
@@ -243,10 +231,10 @@ async function main() {
 
   // ─── Notifications ────────────────────────────────────────
   const notifData = [
-    { type: 'arrival', title: 'New Arrival Today', message: 'Arjun Sharma checking in to Room 1001', isRead: false },
+    { type: 'arrival', title: 'New Arrival Today', message: 'Arjun Sharma checking in to Room 101', isRead: false },
     { type: 'payment', title: 'Payment Received', message: '₹7,500 received for Reservation #1', isRead: false },
-    { type: 'maintenance', title: 'Maintenance Alert', message: 'Door lock malfunction reported in Room 1016 – urgent', isRead: false },
-    { type: 'housekeeping', title: 'Room Ready', message: 'Room 1003 has been cleaned and inspected', isRead: true },
+    { type: 'maintenance', title: 'Maintenance Alert', message: 'Door lock malfunction reported in Room 116 – urgent', isRead: false },
+    { type: 'housekeeping', title: 'Room Ready', message: 'Room 103 has been cleaned and inspected', isRead: true },
     { type: 'system', title: 'Daily Report Available', message: 'August 5th occupancy report is ready for download', isRead: true },
   ];
   for (const n of notifData) {

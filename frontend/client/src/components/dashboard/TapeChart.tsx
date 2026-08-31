@@ -52,13 +52,7 @@ const statusColors: Record<string, string> = {
   no_show: "#6b7280",
 };
 
-const statusLabels: Record<string, string> = {
-  confirmed: "Confirmed",
-  checked_in: "Checked In",
-  checked_out: "Checked Out",
-  cancelled: "Cancelled",
-  no_show: "No Show",
-};
+import { useTranslation } from "react-i18next";
 
 function isSameDay(d1: Date, d2: Date): boolean {
   return d1.getFullYear() === d2.getFullYear() &&
@@ -67,9 +61,18 @@ function isSameDay(d1: Date, d2: Date): boolean {
 }
 
 export default function TapeChart({ rooms, reservations, startDate, days, guests, onRoomClick }: TapeChartProps) {
+  const { t } = useTranslation();
   const [draggedReservation, setDraggedReservation] = useState<Reservation | null>(null);
   const [dragOverRoom, setDragOverRoom] = useState<number | null>(null);
   const { updateRoomStatus } = useStore();
+
+  const statusLabels: Record<string, string> = {
+    confirmed: t("reservations.confirmed"),
+    checked_in: t("reservations.checkedIn"),
+    checked_out: t("reservations.checkedOut"),
+    cancelled: t("reservations.cancelled"),
+    no_show: "No Show",
+  };
 
   const dateHeaders = useMemo(() => {
     const headers = [];

@@ -316,6 +316,17 @@ export async function createBooking(payload) {
   const room = await prisma.room.findUnique({ where: { id: Number(payload.room_id ?? payload.roomId) }, include: { room_type: true } });
   if (!room) throw new Error('Room not found');
 
+  const st = String(room.status || '').toLowerCase();
+  let reason = null;
+  if (st === 'dirty') reason = 'dirty';
+  else if (st === 'maintenance' || st === 'under_maintenance' || st === 'out_of_service') reason = 'under maintenance';
+  else if (st === 'occupied') reason = 'occupied';
+  else if (room.availability === false) reason = 'unavailable';
+
+  if (reason) {
+    throw new Error(`Room #${room.room_number || room.id} is ${reason} and cannot be reserved for a new booking.`);
+  }
+
   const booking = await prisma.booking.create({
     data: {
       booking_number: payload.booking_number || payload.bookingNumber || `BK-${Date.now()}`,

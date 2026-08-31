@@ -78,7 +78,7 @@ export default function RoomsPage() {
             </div>
             <p className="mt-2 text-sm text-slate-500">{room.roomType ?? room.room_type}</p>
             <div className="mt-4 flex items-center justify-between text-sm">
-              <span>${room.currentPrice ?? room.current_price}</span>
+              <span>₹{room.currentPrice ?? room.current_price}</span>
               <span>{room.availability ? 'Available' : 'Booked'}</span>
             </div>
             <div className="mt-4 text-sm text-slate-500">Connected channels: {room.connectedChannels ?? 0}</div>

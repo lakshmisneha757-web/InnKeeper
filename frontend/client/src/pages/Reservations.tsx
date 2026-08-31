@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "@/lib/api";
+import { validateGuestInput } from "@/lib/validation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,6 +13,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { CalendarDays, Plus, Search, LogIn, LogOut, Trash2, Edit } from "lucide-react";
+
+import { useTranslation } from "react-i18next";
 
 function normalizeList(data: any) {
   if (Array.isArray(data)) return { items: data, total: data.length };
@@ -27,7 +30,20 @@ const STATUS_COLORS: Record<string, string> = {
   no_show: "bg-amber-100 text-amber-700",
 };
 
+const getRoomUnavailabilityReason = (room: any): string | null => {
+  if (!room) return null;
+  const status = String(room.status || "").toLowerCase();
+  if (status === "reserved") return "already reserved";
+  if (status === "dirty") return "dirty";
+  if (status === "maintenance" || status === "under_maintenance" || status === "out_of_service") return "under maintenance";
+  if (status === "occupied") return "occupied";
+  if (room.isAvailable === false || room.availability === false) return "unavailable";
+  return null;
+};
+
+
 export default function ReservationsPage() {
+  const { t } = useTranslation();
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -45,22 +61,19 @@ export default function ReservationsPage() {
   const roomsQ = useQuery({
     queryKey: ["rooms-list"],
     queryFn: async () => {
-      const { data } = await apiClient.rooms.list({ limit: 100 });
-      return normalizeList(data).items;
-    },
-  });
-
-  const guestsQ = useQuery({
-    queryKey: ["guests-list"],
-    queryFn: async () => {
-      const { data } = await apiClient.guests.list({ limit: 100 });
-      return normalizeList(data).items;
+      const { data } = await apiClient.rooms.list({ limit: 250 });
+      const items = normalizeList(data).items;
+      return items.sort((a: any, b: any) => (parseInt(a.number || a.room_number, 10) || 0) - (parseInt(b.number || b.room_number, 10) || 0));
     },
   });
 
   const form = useForm({
     defaultValues: {
       guestId: "",
+      firstName: "",
+      lastName: "",
+      email: "",
+      phone: "",
       roomId: "",
       checkIn: "",
       checkOut: "",
@@ -72,19 +85,51 @@ export default function ReservationsPage() {
     },
   });
 
+  const watchCheckIn = form.watch("checkIn");
+  const watchCheckOut = form.watch("checkOut");
+  const watchRoomId = form.watch("roomId");
+
   useEffect(() => {
-    if (!dialogOpen) { form.reset(); setEditing(null); }
+    if (watchCheckIn && watchCheckOut && watchRoomId) {
+      const ci = new Date(watchCheckIn);
+      const co = new Date(watchCheckOut);
+      if (!isNaN(ci.getTime()) && !isNaN(co.getTime()) && co > ci) {
+        const diffDays = Math.ceil((co.getTime() - ci.getTime()) / (1000 * 3600 * 24));
+        const selectedRoom = (roomsQ.data ?? []).find((r: any) => String(r.id) === String(watchRoomId));
+        if (selectedRoom && selectedRoom.rate) {
+          const calculated = diffDays * Number(selectedRoom.rate);
+          form.setValue("totalCharges", calculated);
+        }
+      }
+    }
+  }, [watchCheckIn, watchCheckOut, watchRoomId, roomsQ.data]);
+
+  useEffect(() => {
+    if (!dialogOpen) {
+      form.reset();
+      setEditing(null);
+    }
   }, [dialogOpen]);
 
   const createM = useMutation({
     mutationFn: (d: any) => apiClient.reservations.create(d),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["reservations"] }); toast.success("Reservation created"); setDialogOpen(false); },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["reservations"] });
+      qc.invalidateQueries({ queryKey: ["vehicles"] });
+      toast.success("Reservation created successfully");
+      setDialogOpen(false);
+    },
     onError: (e: any) => toast.error(e?.response?.data?.error || "Failed to create reservation"),
   });
 
   const updateM = useMutation({
     mutationFn: ({ id, data }: any) => apiClient.reservations.update(id, data),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["reservations"] }); toast.success("Reservation updated"); setDialogOpen(false); },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["reservations"] });
+      qc.invalidateQueries({ queryKey: ["vehicles"] });
+      toast.success("Reservation updated successfully");
+      setDialogOpen(false);
+    },
     onError: (e: any) => toast.error(e?.response?.data?.error || "Failed to update reservation"),
   });
 
@@ -98,33 +143,108 @@ export default function ReservationsPage() {
     mutationFn: ({ id, status }: any) => apiClient.reservations.update(id, { status }),
     onSuccess: (_, vars) => {
       qc.invalidateQueries({ queryKey: ["reservations"] });
+      qc.invalidateQueries({ queryKey: ["guests"] });
+      qc.invalidateQueries({ queryKey: ["payments"] });
+      qc.invalidateQueries({ queryKey: ["rooms"] });
+      qc.invalidateQueries({ queryKey: ["dashboard"] });
       toast.success(vars.status === "checked_in" ? "Guest checked in!" : "Guest checked out!");
     },
   });
 
   const handleSubmit = (values: any) => {
-    const payload = {
-      ...values,
-      guestId: values.guestId ? Number(values.guestId) : null,
-      roomId: values.roomId ? Number(values.roomId) : null,
-      totalCharges: Number(values.totalCharges) || 0,
-      paidAmount: Number(values.paidAmount) || 0,
+    const fn = values.firstName || form.getValues("firstName");
+    const ln = values.lastName || form.getValues("lastName");
+    const ci = values.checkIn || form.getValues("checkIn");
+    const co = values.checkOut || form.getValues("checkOut");
+    const vPlate = values.vehiclePlate || (form.watch() as any).vehiclePlate || "";
+    const vMake = values.vehicleMake || (form.watch() as any).vehicleMake || "";
+
+    if (!fn || !ln) {
+      toast.error("First Name and Last Name are required");
+      return;
+    }
+
+    if (!ci || !co) {
+      toast.error("Please select both Check-In and Check-Out dates");
+      return;
+    }
+
+    const emailVal = values.email || form.getValues("email") || "";
+    const phoneVal = values.phone || form.getValues("phone") || "";
+
+    const emailRegex = /^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/;
+    const indiaPhoneRegex = /^(?:\+91[- ]?)?[6-9][0-9]{9}$/;
+
+    if (emailVal.trim() && !emailRegex.test(emailVal.trim())) {
+      toast.error("Please enter a valid email address (e.g. username@domain.com).");
+      return;
+    }
+
+    if (phoneVal.trim() && !indiaPhoneRegex.test(phoneVal.trim())) {
+      toast.error("Phone number must be a valid 10-digit Indian mobile number starting with 6, 7, 8, or 9 (e.g. 9876543210).");
+      return;
+    }
+
+    const payload: any = {
+      firstName: fn,
+      lastName: ln,
+      email: emailVal,
+      phone: phoneVal,
+      roomId: values.roomId || form.getValues("roomId") ? Number(values.roomId || form.getValues("roomId")) : null,
+      checkIn: ci,
+      checkOut: co,
+      status: values.status || form.getValues("status") || "confirmed",
+      totalCharges: Number(values.totalCharges || form.getValues("totalCharges")) || 0,
+      paidAmount: Number(values.paidAmount || form.getValues("paidAmount")) || 0,
+      source: values.source || form.getValues("source") || "Direct",
+      notes: values.notes || form.getValues("notes") || "",
+      vehiclePlate: vPlate,
+      vehicleMake: vMake,
     };
-    if (editing) updateM.mutate({ id: editing.id, data: payload });
-    else createM.mutate(payload);
+
+    if (vPlate.trim()) {
+      const normPlate = vPlate.trim().replace(/\s+/g, "").toUpperCase();
+      const existingRes = (reservationsQ.data?.items ?? []);
+      const isDupRes = existingRes.some((r: any) =>
+        r.id !== editing?.id &&
+        r.vehiclePlate &&
+        String(r.vehiclePlate).replace(/\s+/g, "").toUpperCase() === normPlate
+      );
+      if (!editing && isDupRes) {
+        toast.error(`Validation Error: Vehicle with license plate ${vPlate.trim().toUpperCase()} is already registered for an existing reservation.`);
+        return;
+      }
+    }
+
+    if (editing) {
+      if (editing.guestId) payload.guestId = Number(editing.guestId);
+      updateM.mutate({ id: editing.id, data: payload });
+    } else {
+      createM.mutate(payload);
+    }
   };
 
-  const items = reservationsQ.data?.items ?? [];
+  // Sort items descending by ID so newly reserved candidates are ON TOP
+  const items = (reservationsQ.data?.items ?? []).slice().sort((a: any, b: any) => Number(b.id) - Number(a.id));
+
+  let nightsCount = 0;
+  if (watchCheckIn && watchCheckOut) {
+    const ci = new Date(watchCheckIn);
+    const co = new Date(watchCheckOut);
+    if (!isNaN(ci.getTime()) && !isNaN(co.getTime()) && co > ci) {
+      nightsCount = Math.ceil((co.getTime() - ci.getTime()) / (1000 * 3600 * 24));
+    }
+  }
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-semibold">Reservations</h1>
-          <p className="text-sm text-muted-foreground">Manage all hotel reservations</p>
+          <h1 className="text-2xl font-semibold">{t("reservations.title")}</h1>
+          <p className="text-sm text-muted-foreground">{t("reservations.subtitle")}</p>
         </div>
-        <Button onClick={() => { setEditing(null); form.reset(); setDialogOpen(true); }} className="gap-2">
-          <Plus className="h-4 w-4" /> New Reservation
+        <Button onClick={() => { setEditing(null); form.reset(); setDialogOpen(true); }} className="gap-2 cursor-pointer">
+          <Plus className="h-4 w-4" /> {t("reservations.newReservation")}
         </Button>
       </div>
 
@@ -133,7 +253,7 @@ export default function ReservationsPage() {
           <div className="flex items-center gap-3">
             <div className="relative flex-1 max-w-sm">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input placeholder="Search guest name, status..." className="pl-9" value={search} onChange={e => setSearch(e.target.value)} />
+              <Input placeholder={t("reservations.searchPlaceholder")} className="pl-9" value={search} onChange={e => setSearch(e.target.value)} />
             </div>
           </div>
         </CardHeader>
@@ -142,60 +262,73 @@ export default function ReservationsPage() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>#</TableHead>
-                  <TableHead>Guest</TableHead>
-                  <TableHead>Room</TableHead>
-                  <TableHead>Check In</TableHead>
-                  <TableHead>Check Out</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Charges</TableHead>
-                  <TableHead>Paid</TableHead>
-                  <TableHead>Source</TableHead>
-                  <TableHead>Actions</TableHead>
+                  <TableHead>Reservation ID</TableHead>
+                  <TableHead>{t("reservations.guestName")}</TableHead>
+                  <TableHead>{t("reservations.roomNumber")}</TableHead>
+                  <TableHead>{t("reservations.dates")}</TableHead>
+                  <TableHead>{t("reservations.dates")}</TableHead>
+                  <TableHead>{t("reservations.status")}</TableHead>
+                  <TableHead>{t("reservations.totalAmount")}</TableHead>
+                  <TableHead>{t("reservations.source")}</TableHead>
+                  <TableHead>{t("common.actions")}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {reservationsQ.isLoading ? (
-                  <TableRow><TableCell colSpan={10} className="text-center py-8 text-muted-foreground">Loading...</TableCell></TableRow>
+                  <TableRow><TableCell colSpan={9} className="text-center py-8 text-muted-foreground">Loading...</TableCell></TableRow>
                 ) : items.length === 0 ? (
-                  <TableRow><TableCell colSpan={10} className="text-center py-8 text-muted-foreground">No reservations found</TableCell></TableRow>
+                  <TableRow><TableCell colSpan={9} className="text-center py-8 text-muted-foreground">No reservations found</TableCell></TableRow>
                 ) : items.map((r: any) => (
                   <TableRow key={r.id}>
-                    <TableCell className="font-mono text-xs">{r.id}</TableCell>
+                    <TableCell className="font-mono text-xs font-bold text-foreground">RES-{String(r.id).padStart(4, '0')}</TableCell>
                     <TableCell className="font-medium">
                       {r.guest ? `${r.guest.firstName} ${r.guest.lastName}` : "—"}
                     </TableCell>
-                    <TableCell>{r.roomId ? `Room ${r.roomId}` : "—"}</TableCell>
+                    <TableCell className="font-semibold text-foreground">
+                      {(() => {
+                        const matchedRoom = (roomsQ.data ?? []).find(
+                          (rm: any) => String(rm.id) === String(r.roomId) || String(rm.number) === String(r.roomId) || String(rm.room_number) === String(r.roomId)
+                        );
+                        if (r.room?.room_number) return r.room.room_number;
+                        if (r.room?.number) return r.room.number;
+                        if (matchedRoom?.number) return matchedRoom.number;
+                        if (matchedRoom?.room_number) return matchedRoom.room_number;
+                        return r.roomId ? `${r.roomId}` : "—";
+                      })()}
+                    </TableCell>
                     <TableCell>{r.checkIn ? new Date(r.checkIn).toLocaleDateString() : "—"}</TableCell>
                     <TableCell>{r.checkOut ? new Date(r.checkOut).toLocaleDateString() : "—"}</TableCell>
-                    <TableCell>
-                      <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${STATUS_COLORS[r.status] ?? "bg-slate-100 text-slate-600"}`}>
-                        {r.status?.replace("_", " ") ?? "—"}
+                      <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${STATUS_COLORS[(r.status || '').toLowerCase()] ?? "bg-slate-100 text-slate-600"}`}>
+                        {(() => {
+                          const st = (r.status || '').toLowerCase();
+                          if (st === 'checked_in' || st === 'checkedin') return t("reservations.checkedIn");
+                          if (st === 'checked_out' || st === 'checkedout') return t("reservations.checkedOut");
+                          if (st === 'confirmed') return t("reservations.confirmed");
+                          if (st === 'cancelled') return t("reservations.cancelled");
+                          return st.replace('_', ' ');
+                        })()}
                       </span>
-                    </TableCell>
                     <TableCell>₹{(r.totalCharges ?? 0).toLocaleString()}</TableCell>
-                    <TableCell>₹{(r.paidAmount ?? 0).toLocaleString()}</TableCell>
-                    <TableCell className="text-xs text-muted-foreground">{r.source ?? "—"}</TableCell>
+                    <TableCell className="text-xs text-muted-foreground">
+                      {r.source === "Direct" ? t("reservations.sourceDirect") : (r.source ?? "—")}
+                    </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-1">
-                        {r.status === "confirmed" && (
-                          <Button size="sm" variant="outline" className="h-7 px-2 gap-1 text-xs text-green-700"
-                            onClick={() => quickStatusM.mutate({ id: r.id, status: "checked_in" })}>
-                            <LogIn className="h-3 w-3" /> In
-                          </Button>
-                        )}
-                        {r.status === "checked_in" && (
-                          <Button size="sm" variant="outline" className="h-7 px-2 gap-1 text-xs text-blue-700"
-                            onClick={() => quickStatusM.mutate({ id: r.id, status: "checked_out" })}>
-                            <LogOut className="h-3 w-3" /> Out
-                          </Button>
-                        )}
                         <Button size="sm" variant="ghost" className="h-7 w-7 p-0"
                           onClick={() => {
                             setEditing(r);
+                            const matchedRoom = (roomsQ.data ?? []).find(
+                              (rm: any) => String(rm.id) === String(r.roomId) || String(rm.number) === String(r.roomId) || String(rm.room_number) === String(r.roomId)
+                            );
+                            const effectiveRoomId = matchedRoom ? String(matchedRoom.id) : (r.roomId ? String(r.roomId) : "");
+
                             form.reset({
                               guestId: r.guestId ? String(r.guestId) : "",
-                              roomId: r.roomId ? String(r.roomId) : "",
+                              firstName: r.guest?.firstName || "",
+                              lastName: r.guest?.lastName || "",
+                              email: r.guest?.email || "",
+                              phone: r.guest?.phone || "",
+                              roomId: effectiveRoomId,
                               checkIn: r.checkIn ? new Date(r.checkIn).toISOString().split("T")[0] : "",
                               checkOut: r.checkOut ? new Date(r.checkOut).toISOString().split("T")[0] : "",
                               status: r.status ?? "confirmed",
@@ -220,7 +353,6 @@ export default function ReservationsPage() {
             </Table>
           </div>
 
-          {/* Pagination */}
           <div className="flex items-center justify-between mt-4 text-sm text-muted-foreground">
             <span>{reservationsQ.data?.total ?? 0} total reservations</span>
             <div className="flex gap-2">
@@ -232,96 +364,198 @@ export default function ReservationsPage() {
       </Card>
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-lg bg-white dark:bg-slate-900 border-2 border-slate-300 dark:border-slate-700 text-slate-900 dark:text-slate-100 shadow-2xl p-6 rounded-2xl">
+        <DialogContent className="max-w-lg">
           <DialogHeader>
-            <DialogTitle className="text-xl font-bold text-slate-900 dark:text-white">{editing ? "Edit Reservation" : "New Reservation"}</DialogTitle>
+            <DialogTitle className="text-2xl font-bold text-slate-900">{editing ? t("reservations.editReservationTitle") : t("reservations.newReservation")}</DialogTitle>
           </DialogHeader>
           <Form {...form}>
-            <form onSubmit={form.handleSubmit(handleSubmit)} className="grid gap-3">
-              <div className="grid grid-cols-2 gap-3">
-                <FormItem>
-                  <FormLabel>Guest</FormLabel>
-                  <FormControl>
-                    <Select value={form.watch("guestId")} onValueChange={v => form.setValue("guestId", v)}>
-                      <SelectTrigger><SelectValue placeholder="Select guest" /></SelectTrigger>
-                      <SelectContent>
-                        {(guestsQ.data ?? []).map((g: any) => (
-                          <SelectItem key={g.id} value={String(g.id)}>{g.firstName} {g.lastName}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </FormControl>
-                </FormItem>
-                <FormItem>
-                  <FormLabel>Room</FormLabel>
-                  <FormControl>
-                    <Select value={form.watch("roomId")} onValueChange={v => form.setValue("roomId", v)}>
-                      <SelectTrigger><SelectValue placeholder="Select room" /></SelectTrigger>
-                      <SelectContent>
-                        {(roomsQ.data ?? []).map((r: any) => (
-                          <SelectItem key={r.id} value={String(r.id)}>Room {r.number} ({r.type})</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </FormControl>
-                </FormItem>
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                const values = form.getValues();
+                const validationErr = validateGuestInput(values);
+                if (validationErr) {
+                  toast.error(validationErr);
+                  return;
+                }
+                if (!values.roomId) {
+                  toast.error("Validation Error: Please select a room for the reservation");
+                  return;
+                }
+                const selectedRoom = (roomsQ.data ?? []).find((r: any) => String(r.id) === String(values.roomId));
+                const reason = getRoomUnavailabilityReason(selectedRoom);
+                if (reason) {
+                  const roomNum = selectedRoom?.number || selectedRoom?.room_number || values.roomId;
+                  toast.error(`Validation Error: Room ${roomNum} is ${reason} and cannot be reserved for a new booking.`);
+                  return;
+                }
+                handleSubmit(values);
+              }}
+              className="space-y-4 pt-2"
+            >
+
+              {/* Guest Information Inputs */}
+              <div className="space-y-2">
+                <FormLabel className="font-semibold text-slate-800">{t("reservations.guestInformation")}</FormLabel>
+                <div className="grid grid-cols-2 gap-3">
+                  <FormItem>
+                    <FormLabel className="text-xs font-medium text-slate-700">{t("reservations.firstNameRequired")}</FormLabel>
+                    <FormControl>
+                      <Input
+                        placeholder="John"
+                        value={form.watch("firstName") || ""}
+                        onChange={(e) => form.setValue("firstName", e.target.value)}
+                      />
+                    </FormControl>
+                  </FormItem>
+                  <FormItem>
+                    <FormLabel className="text-xs font-medium text-slate-700">{t("reservations.lastNameRequired")}</FormLabel>
+                    <FormControl>
+                      <Input
+                        placeholder="Doe"
+                        value={form.watch("lastName") || ""}
+                        onChange={(e) => form.setValue("lastName", e.target.value)}
+                      />
+                    </FormControl>
+                  </FormItem>
+                  <FormItem>
+                    <FormLabel className="text-xs font-medium text-slate-700">{t("reservations.email")}</FormLabel>
+                    <FormControl>
+                      <Input
+                        type="email"
+                        placeholder="john@example.com"
+                        value={form.watch("email") || ""}
+                        onChange={(e) => form.setValue("email", e.target.value)}
+                      />
+                    </FormControl>
+                  </FormItem>
+                  <FormItem>
+                    <FormLabel className="text-xs font-medium text-slate-700">{t("roomDrawer.phone10Digits")}</FormLabel>
+                    <FormControl>
+                      <Input
+                        placeholder="9876543210"
+                        maxLength={10}
+                        value={form.watch("phone") || ""}
+                        onChange={(e) => form.setValue("phone", e.target.value.replace(/\D/g, "").slice(0, 10))}
+                      />
+                    </FormControl>
+                  </FormItem>
+                </div>
               </div>
-              <div className="grid grid-cols-2 gap-3">
-                <FormItem>
-                  <FormLabel>Check In</FormLabel>
-                  <FormControl><Input type="date" {...form.register("checkIn")} /></FormControl>
-                </FormItem>
-                <FormItem>
-                  <FormLabel>Check Out</FormLabel>
-                  <FormControl><Input type="date" {...form.register("checkOut")} /></FormControl>
-                </FormItem>
+
+              {/* Guest Vehicle Information */}
+              <div className="space-y-2 pt-1 border-t">
+                <FormLabel className="font-semibold text-slate-800">{t("reservations.vehicleDetailsOptional")}</FormLabel>
+                <div className="grid grid-cols-2 gap-3">
+                  <FormItem>
+                    <FormLabel className="text-xs font-medium text-slate-700">{t("vehicles.licensePlate")}</FormLabel>
+                    <FormControl>
+                      <Input
+                        placeholder="e.g. AP 39 AB 1234"
+                        maxLength={13}
+                        value={(form.watch() as any).vehiclePlate || ""}
+                        onChange={(e) => {
+                          const formatted = e.target.value.toUpperCase().replace(/[^A-Z0-9\s]/g, "").slice(0, 13);
+                          form.setValue("vehiclePlate" as any, formatted);
+                        }}
+                      />
+                    </FormControl>
+                  </FormItem>
+                  <FormItem>
+                    <FormLabel className="text-xs font-medium text-slate-700">{t("reservations.vehicleBrandModel")}</FormLabel>
+                    <FormControl>
+                      <Input
+                        placeholder="e.g. Toyota Innova"
+                        maxLength={30}
+                        value={(form.watch() as any).vehicleMake || ""}
+                        onChange={(e) => {
+                          const formatted = e.target.value.replace(/[^A-Za-z0-9\s\-\.]/g, "").slice(0, 30);
+                          form.setValue("vehicleMake" as any, formatted);
+                        }}
+                      />
+                    </FormControl>
+                  </FormItem>
+                </div>
               </div>
-              <div className="grid grid-cols-2 gap-3">
+
+              <div className="grid grid-cols-2 gap-4">
                 <FormItem>
-                  <FormLabel>Status</FormLabel>
+                  <FormLabel className="font-semibold text-slate-800">{t("roomDrawer.type", "Room")}</FormLabel>
                   <FormControl>
-                    <Select value={form.watch("status")} onValueChange={v => form.setValue("status", v)}>
-                      <SelectTrigger><SelectValue /></SelectTrigger>
+                    <Select value={form.watch("roomId") ? String(form.watch("roomId")) : ""} onValueChange={v => form.setValue("roomId", v)}>
+                      <SelectTrigger><SelectValue placeholder={t("reservations.selectRoom")} /></SelectTrigger>
                       <SelectContent>
-                        {["confirmed", "checked_in", "checked_out", "cancelled", "no_show"].map(s => (
-                          <SelectItem key={s} value={s}>{s.replace("_", " ")}</SelectItem>
-                        ))}
+                        {(roomsQ.data ?? []).map((r: any) => {
+                          const reason = getRoomUnavailabilityReason(r);
+                          const isUnavailable = Boolean(reason);
+                          const roomTypeKey = String(r.type || "standard").toLowerCase();
+                          const translatedType = t(`dashboard.${roomTypeKey}`, r.type || "Standard") as string;
+                          const reasonKeyMap: Record<string, string> = {
+                            "already reserved": "reserved",
+                            "dirty": "dirty",
+                            "occupied": "occupied",
+                            "under maintenance": "maintenance",
+                            "unavailable": "maintenance",
+                          };
+                          const translatedReason = reason
+                            ? `[${(t(`dashboard.${reasonKeyMap[reason] ?? reason}`, reason) as string).toUpperCase()}]`
+                            : "";
+                          return (
+                            <SelectItem key={r.id} value={String(r.id)} disabled={isUnavailable}>
+                              {(t("roomDrawer.roomNumber", { number: r.number || r.room_number }) as string)} ({translatedType}){isUnavailable ? ` - ${translatedReason}` : ""}
+                            </SelectItem>
+                          );
+                        })}
                       </SelectContent>
                     </Select>
                   </FormControl>
                 </FormItem>
                 <FormItem>
-                  <FormLabel>Source</FormLabel>
+                  <FormLabel className="font-semibold text-slate-800">{t("reservations.bookingSource")}</FormLabel>
                   <FormControl>
-                    <Select value={form.watch("source")} onValueChange={v => form.setValue("source", v)}>
+                    <Select value={form.watch("source") || "Direct"} onValueChange={v => form.setValue("source", v)}>
                       <SelectTrigger><SelectValue /></SelectTrigger>
                       <SelectContent>
                         {["Direct", "Booking.com", "Expedia", "Airbnb", "MakeMyTrip"].map(s => (
-                          <SelectItem key={s} value={s}>{s}</SelectItem>
+                          <SelectItem key={s} value={s}>
+                            {s === "Direct" ? t("reservations.sourceDirect") : s}
+                          </SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
                   </FormControl>
                 </FormItem>
               </div>
-              <div className="grid grid-cols-2 gap-3">
+
+              <div className="grid grid-cols-2 gap-4">
                 <FormItem>
-                  <FormLabel>Total Charges (₹)</FormLabel>
-                  <FormControl><Input type="number" {...form.register("totalCharges", { valueAsNumber: true })} /></FormControl>
+                  <FormLabel className="font-semibold text-slate-800">{t("reservations.checkInLabel")}</FormLabel>
+                  <FormControl>
+                    <Input
+                      type="date"
+                      value={form.watch("checkIn") || ""}
+                      onChange={(e) => form.setValue("checkIn", e.target.value)}
+                    />
+                  </FormControl>
                 </FormItem>
                 <FormItem>
-                  <FormLabel>Paid Amount (₹)</FormLabel>
-                  <FormControl><Input type="number" {...form.register("paidAmount", { valueAsNumber: true })} /></FormControl>
+                  <FormLabel className="font-semibold text-slate-800">{t("reservations.checkOutLabel")}</FormLabel>
+                  <FormControl>
+                    <Input
+                      type="date"
+                      value={form.watch("checkOut") || ""}
+                      onChange={(e) => form.setValue("checkOut", e.target.value)}
+                    />
+                  </FormControl>
                 </FormItem>
               </div>
-              <FormItem>
-                <FormLabel>Notes</FormLabel>
-                <FormControl><Input {...form.register("notes")} placeholder="Special requests..." /></FormControl>
-              </FormItem>
-              <div className="flex gap-2 justify-end pt-2">
-                <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>Cancel</Button>
-                <Button type="submit" disabled={createM.isPending || updateM.isPending}>
-                  {createM.isPending || updateM.isPending ? "Saving..." : "Save"}
+
+              <div className="flex gap-3 justify-end pt-4">
+                <Button type="button" variant="outline" className="h-11 rounded-2xl border-slate-200 bg-white hover:bg-slate-50 text-slate-700 font-medium px-6 shadow-2xs" onClick={() => setDialogOpen(false)}>
+                  {t("common.cancel")}
+                </Button>
+                <Button type="submit" className="h-11 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white font-semibold px-6 shadow-md shadow-blue-500/20" disabled={createM.isPending || updateM.isPending}>
+                  {createM.isPending || updateM.isPending ? t("common.saving") : t("reservations.saveReservationButton")}
                 </Button>
               </div>
             </form>
@@ -331,3 +565,5 @@ export default function ReservationsPage() {
     </div>
   );
 }
+
+

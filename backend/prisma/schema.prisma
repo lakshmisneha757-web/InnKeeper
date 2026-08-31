@@ -44,8 +44,12 @@ model Room {
   hotel           Hotel?            @relation(fields: [hotel_id], references: [id])
   room_type       RoomType          @relation(fields: [room_type_id], references: [id])
   bookings        Booking[]
+  reservations    Reservation[]
   channelInventory ChannelInventory[]
   pricingHistory  PricingHistory[]
+
+  @@index([status])
+  @@index([floor])
 }
 
 model Channel {
@@ -83,6 +87,9 @@ model Booking {
   booking_status String
   created_at     DateTime @default(now())
   room           Room     @relation(fields: [room_id], references: [id])
+
+  @@index([room_id])
+  @@index([check_in, check_out])
 }
 
 model PricingRule {
@@ -111,6 +118,8 @@ model PricingHistory {
   triggered_by String
   created_at   DateTime @default(now())
   room         Room     @relation(fields: [room_id], references: [id])
+
+  @@index([room_id])
 }
 
 model SyncLog {
@@ -157,6 +166,8 @@ model User {
   role       String   @default("receptionist")
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt
+
+  @@index([role])
 }
 
 model Guest {
@@ -195,7 +206,13 @@ model Reservation {
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
   guest        Guest?    @relation(fields: [guestId], references: [id])
+  room         Room?     @relation(fields: [roomId], references: [id])
   payments     Payment[]
+
+  @@index([guestId])
+  @@index([roomId])
+  @@index([status])
+  @@index([checkIn, checkOut])
 }
 
 model Payment {
@@ -208,6 +225,9 @@ model Payment {
   createdAt     DateTime     @default(now())
   updatedAt     DateTime     @updatedAt
   reservation   Reservation? @relation(fields: [reservationId], references: [id])
+
+  @@index([reservationId])
+  @@index([paymentStatus])
 }
 
 model Vehicle {
@@ -251,6 +271,9 @@ model Housekeeping {
   notes       String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+
+  @@index([roomId])
+  @@index([status])
 }
 
 model Maintenance {
@@ -262,6 +285,9 @@ model Maintenance {
   notes       String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+
+  @@index([roomId])
+  @@index([status])
 }
 
 model AppNotification {

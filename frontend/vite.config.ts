@@ -18,7 +18,21 @@ export default defineConfig({
         changeOrigin: true
       }
     }
-  }
+  },
+  build: {
+    chunkSizeWarningLimit: 1000,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          'vendor-react': ['react', 'react-dom'],
+          'vendor-query': ['@tanstack/react-query'],
+          'vendor-icons': ['lucide-react'],
+          'vendor-charts': ['recharts'],
+          'vendor-utils': ['framer-motion', 'canvas-confetti'],
+        },
+      },
+    },
+  },
 });
 
 

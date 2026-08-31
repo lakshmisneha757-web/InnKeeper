@@ -4,6 +4,7 @@ import { apiClient } from "@/lib/api";
 import { useQuery } from "@tanstack/react-query";
 import { Skeleton } from "@/components/ui/skeleton";
 import { BedDouble, IndianRupee, Car, CreditCard } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 function normalizeList(data: any) {
   if (Array.isArray(data)) return { items: data, total: data.length };
@@ -12,6 +13,7 @@ function normalizeList(data: any) {
 }
 
 export default function Module5Widgets() {
+  const { t } = useTranslation();
   const vehiclesQ = useQuery({
     queryKey: ["module5", "vehicles", "summary"],
     queryFn: async () => {
@@ -31,7 +33,7 @@ export default function Module5Widgets() {
   const roomsQ = useQuery({
     queryKey: ["module5", "rooms", "summary"],
     queryFn: async () => {
-      const { data } = await apiClient.rooms.list({ limit: 100 });
+      const { data } = await apiClient.rooms.list({ limit: 250 });
       return normalizeList(data);
     },
   });
@@ -61,36 +63,39 @@ export default function Module5Widgets() {
 
   const widgets = [
     {
-      title: "Occupancy Rate",
+      title: t("dashboard.occupancy"),
       value: roomsQ.isLoading ? null : occupancyRate !== null ? `${occupancyRate}%` : "—",
-      subtitle: `${(roomsQ.data?.items ?? []).filter((r: any) => r.status === "occupied").length} of ${roomsQ.data?.items?.length ?? 0} rooms`,
+      subtitle: t("dashboard.occupancyDetail", {
+        occupied: (roomsQ.data?.items ?? []).filter((r: any) => r.status === "occupied").length,
+        total: roomsQ.data?.items?.length ?? 0,
+      }),
       icon: BedDouble,
       color: "text-sky-600",
       bg: "bg-sky-50",
       loading: roomsQ.isLoading,
     },
     {
-      title: "Today's Revenue",
+      title: t("dashboard.todayRevenue"),
       value: paymentsQ.isLoading ? null : `₹${todayRevenue.toLocaleString()}`,
-      subtitle: "Payments collected today",
+      subtitle: t("dashboard.paymentsCollectedToday"),
       icon: IndianRupee,
       color: "text-emerald-600",
       bg: "bg-emerald-50",
       loading: paymentsQ.isLoading,
     },
     {
-      title: "Parking Occupancy",
+      title: t("dashboard.parkingOccupancy"),
       value: vehiclesQ.isLoading ? null : String(vehicleCount),
-      subtitle: "Vehicles currently registered",
+      subtitle: t("dashboard.vehiclesRegistered"),
       icon: Car,
       color: "text-violet-600",
       bg: "bg-violet-50",
       loading: vehiclesQ.isLoading,
     },
     {
-      title: "Pending Payments",
+      title: t("dashboard.pendingPayments"),
       value: paymentsQ.isLoading ? null : `₹${pendingPayments.toLocaleString()}`,
-      subtitle: "Awaiting settlement",
+      subtitle: t("dashboard.awaitingSettlement"),
       icon: CreditCard,
       color: "text-amber-600",
       bg: "bg-amber-50",

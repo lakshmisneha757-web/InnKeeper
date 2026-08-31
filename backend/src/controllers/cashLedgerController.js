@@ -23,13 +23,17 @@ export async function listCashLedger(req, res) {
 
 export async function createCashLedger(req, res) {
   try {
+    const { employeeName, openingCash, closingCash, status, notes } = req.body;
+    if (!employeeName || !String(employeeName).trim()) {
+      return res.status(400).json({ error: 'Employee Name is required.' });
+    }
     const entry = await prisma.cashLedger.create({
       data: {
-        employeeName: req.body.employeeName,
-        openingCash: Number(req.body.openingCash ?? 0),
-        closingCash: Number(req.body.closingCash ?? 0),
-        status: req.body.status || 'open',
-        notes: req.body.notes || null
+        employeeName: String(employeeName).trim(),
+        openingCash: Number(openingCash ?? 0),
+        closingCash: Number(closingCash ?? 0),
+        status: status || 'open',
+        notes: notes || null
       }
     });
     res.status(201).json(entry);

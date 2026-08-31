@@ -14,10 +14,14 @@ import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 
 function App() {
-  const [isLoggedIn, setIsLoggedIn] = useState(() => localStorage.getItem('innkeeper-auth') === 'true');
+  const [isLoggedIn, setIsLoggedIn] = useState(() => {
+    // Clear legacy auto-login from localStorage if present
+    localStorage.removeItem('innkeeper-auth');
+    return sessionStorage.getItem('innkeeper-session') === 'true';
+  });
 
   useEffect(() => {
-    const onStorage = () => setIsLoggedIn(localStorage.getItem('innkeeper-auth') === 'true');
+    const onStorage = () => setIsLoggedIn(sessionStorage.getItem('innkeeper-session') === 'true');
     window.addEventListener('storage', onStorage);
     return () => window.removeEventListener('storage', onStorage);
   }, []);
@@ -25,7 +29,7 @@ function App() {
   return (
     <>
       <Routes>
-        <Route path="/login" element={<LoginPage onLogin={() => setIsLoggedIn(true)} />} />
+        <Route path="/login" element={isLoggedIn ? <Navigate to="/dashboard" replace /> : <LoginPage onLogin={() => setIsLoggedIn(true)} />} />
         <Route element={<Layout isLoggedIn={isLoggedIn} setIsLoggedIn={setIsLoggedIn} />}>
           <Route path="/" element={isLoggedIn ? <Navigate to="/dashboard" replace /> : <Navigate to="/login" replace />} />
           <Route path="/dashboard" element={isLoggedIn ? <DashboardPage /> : <Navigate to="/login" replace />} />

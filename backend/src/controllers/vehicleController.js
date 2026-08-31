@@ -33,7 +33,28 @@ export async function getVehicle(req, res) {
 
 export async function createVehicle(req, res) {
   try {
-    const vehicle = await prisma.vehicle.create({ data: req.body });
+    const { make, model, licensePlate, state, parkingSlot } = req.body;
+    if (!licensePlate || !String(licensePlate).trim()) {
+      return res.status(400).json({ error: 'License plate is required.' });
+    }
+    const cleanPlate = String(licensePlate).trim().toUpperCase();
+    const norm = (s) => String(s || '').replace(/\s+/g, '').toUpperCase();
+
+    const allVehicles = await prisma.vehicle.findMany();
+    const existing = allVehicles.find(v => norm(v.licensePlate) === norm(cleanPlate));
+    if (existing) {
+      return res.status(400).json({ error: `Vehicle with license plate ${cleanPlate} is already registered.` });
+    }
+
+    const vehicle = await prisma.vehicle.create({
+      data: {
+        make: make ? String(make).trim() : 'Unknown',
+        model: model ? String(model).trim() : '',
+        licensePlate: cleanPlate,
+        state: state ? String(state).trim() : 'NA',
+        parkingSlot: parkingSlot ? String(parkingSlot).trim() : null
+      }
+    });
     res.status(201).json(vehicle);
   } catch (err) {
     res.status(500).json({ error: err.message });

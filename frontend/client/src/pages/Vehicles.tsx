@@ -12,26 +12,68 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { vehicleFormSchema, VehicleForm } from "@/lib/module5Schemas";
 import { toast } from "sonner";
+import { validateIndianLicensePlate, validateVehicleBrandModel } from "@/lib/validation";
+
+import { useTranslation } from "react-i18next";
 
 export default function VehiclesPage(){
+  const { t } = useTranslation();
   const [search,setSearch]=useState("");
   const [page,setPage]=useState(1);
   const qc = useQueryClient();
 
   const q = useQuery({
-    queryKey:["vehicles",page,search],
-    queryFn: async ()=>{
-      const { data } = await apiClient.vehicles.list({ page, limit: 20, q: search });
-      return normalizeListResponse<any>(data);
+    queryKey: ["vehicles", page, search],
+    queryFn: async () => {
+      const [{ data: vData }, { data: resData }] = await Promise.all([
+        apiClient.vehicles.list({ page, limit: 50, q: search }),
+        apiClient.reservations.list({ limit: 100 }),
+      ]);
+      const vList = normalizeListResponse<any>(vData).items;
+      const resList = Array.isArray(resData) ? resData : (resData?.items || []);
+
+      const norm = (s: string) => String(s || '').replace(/\s+/g, '').toUpperCase();
+      const combined: any[] = [];
+      const seenPlates = new Set<string>();
+
+      vList.forEach((v: any) => {
+        if (v.licensePlate) {
+          const key = norm(v.licensePlate);
+          if (key && !seenPlates.has(key)) {
+            seenPlates.add(key);
+            combined.push(v);
+          }
+        }
+      });
+
+      resList.forEach((r: any) => {
+        if (r.vehiclePlate) {
+          const key = norm(r.vehiclePlate);
+          if (key && !seenPlates.has(key)) {
+            seenPlates.add(key);
+            combined.push({
+              id: `res-veh-${r.id}`,
+              licensePlate: r.vehiclePlate,
+              make: r.vehicleMake || r.vehicleInfo || "Guest Vehicle",
+              model: r.vehicleModel || "",
+              parkingSlot: r.parkingSlot || `Slot #${(r.id % 20) + 1}`,
+              parkingStatus: "Reserved Guest",
+              arrivalTime: r.checkIn || new Date().toISOString(),
+            });
+          }
+        }
+      });
+
+      return { items: combined, total: combined.length };
     }
   });
 
-  const create = useMutation({ mutationFn: (payload:any)=>apiClient.vehicles.create(payload), onSuccess: ()=>{qc.invalidateQueries({ queryKey: ["vehicles"] }); qc.invalidateQueries({ queryKey: ["dashboard"] }); toast.success("Vehicle added");}, onError: (err:any)=>{ const msg = err?.response?.data?.error ?? err?.message ?? "Failed"; toast.error(String(msg)); } });
+  const create = useMutation({ mutationFn: (payload:any)=>apiClient.vehicles.create(payload), onSuccess: ()=>{qc.invalidateQueries({ queryKey: ["vehicles"] }); qc.invalidateQueries({ queryKey: ["dashboard"] }); toast.success(t("vehicles.toastAdded"));}, onError: (err:any)=>{ const msg = err?.response?.data?.error ?? err?.message ?? "Failed"; toast.error(String(msg)); } });
   
 
-  const update = useMutation({ mutationFn: ({ id, data }:any)=>apiClient.vehicles.update(id, data), onSuccess: ()=>{qc.invalidateQueries({ queryKey: ["vehicles"] }); toast.success("Vehicle updated");}, onError: (err:any)=>{ const msg = err?.response?.data?.error ?? err?.message ?? "Failed"; toast.error(String(msg)); } });
+  const update = useMutation({ mutationFn: ({ id, data }:any)=>apiClient.vehicles.update(id, data), onSuccess: ()=>{qc.invalidateQueries({ queryKey: ["vehicles"] }); toast.success(t("vehicles.toastUpdated"));}, onError: (err:any)=>{ const msg = err?.response?.data?.error ?? err?.message ?? "Failed"; toast.error(String(msg)); } });
 
-  const remove = useMutation({ mutationFn: (id:string)=>apiClient.vehicles.remove(id), onSuccess: ()=>{qc.invalidateQueries({ queryKey: ["vehicles"] }); toast.success("Vehicle removed");}, onError: (err:any)=>{ const msg = err?.response?.data?.error ?? err?.message ?? "Failed"; toast.error(String(msg)); } });
+  const remove = useMutation({ mutationFn: (id:string)=>apiClient.vehicles.remove(id), onSuccess: ()=>{qc.invalidateQueries({ queryKey: ["vehicles"] }); toast.success(t("vehicles.toastRemoved"));}, onError: (err:any)=>{ const msg = err?.response?.data?.error ?? err?.message ?? "Failed"; toast.error(String(msg)); } });
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<any | null>(null);
@@ -58,11 +100,10 @@ export default function VehiclesPage(){
     <div className="space-y-6">
       <Card>
         <CardHeader className="flex items-center justify-between">
-          <CardTitle>Vehicle Registry</CardTitle>
+          <CardTitle>{t("vehicles.title")}</CardTitle>
           <div className="flex items-center gap-2">
-            <Input placeholder="Search vehicles" value={search} onChange={(e:any)=>setSearch(e.target.value)} />
-            <Button onClick={handleAdd}>New</Button>
-            <Button variant="outline" onClick={handleExport}>Export CSV</Button>
+            <Input placeholder={t("vehicles.searchPlaceholder")} value={search} onChange={(e:any)=>setSearch(e.target.value)} className="w-64" />
+            <Button variant="outline" onClick={handleExport} className="cursor-pointer">{t("vehicles.exportCsv")}</Button>
           </div>
         </CardHeader>
         <CardContent>
@@ -70,27 +111,31 @@ export default function VehiclesPage(){
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Plate</TableHead>
-                  <TableHead>Make / Model</TableHead>
-                  <TableHead>Slot</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Arrival</TableHead>
+                  <TableHead>{t("vehicles.licensePlate")}</TableHead>
+                  <TableHead>{t("vehicles.makeModel")}</TableHead>
+                  <TableHead>{t("vehicles.parkingSlot")}</TableHead>
+                  <TableHead>{t("common.status")}</TableHead>
+                  <TableHead>{t("vehicles.arrival")}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {(q.data?.items ?? []).map((v:any)=> (
-                  <TableRow key={v.id}>
-                    <TableCell>{v.licensePlate}</TableCell>
-                    <TableCell>{v.make} {v.model}</TableCell>
-                    <TableCell>{v.parkingSlot ?? "—"}</TableCell>
-                    <TableCell>{v.parkingStatus}</TableCell>
-                    <TableCell>{v.arrivalTime ? new Date(v.arrivalTime).toLocaleString() : "—"}</TableCell>
-                    <TableCell className="flex gap-2">
-                      <Button size="sm" onClick={()=>{ setEditing(v); form.reset({ make: v.make, model: v.model, licensePlate: v.licensePlate, state: v.state, parkingSlot: v.parkingSlot ?? "" }); setDialogOpen(true); }}>Edit</Button>
-                      <Button size="sm" variant="destructive" onClick={()=>{ if(!window.confirm("Delete vehicle?")) return; remove.mutate(v.id); }}>Delete</Button>
-                    </TableCell>
-                  </TableRow>
-                ))}
+                {(q.data?.items ?? []).map((v:any)=> {
+                  const rawModel = (v.model || "").replace(/^Room\s+\d+/i, "").trim();
+                  const displayMakeModel = `${v.make || ''} ${rawModel}`.trim() || t("vehicles.guestVehicle");
+                  return (
+                    <TableRow key={v.id}>
+                      <TableCell className="font-mono font-medium">{v.licensePlate}</TableCell>
+                      <TableCell>{displayMakeModel}</TableCell>
+                      <TableCell>{v.parkingSlot ?? "—"}</TableCell>
+                      <TableCell>{v.parkingStatus || t("common.registered")}</TableCell>
+                      <TableCell>{v.arrivalTime ? new Date(v.arrivalTime).toLocaleString() : "—"}</TableCell>
+                      <TableCell className="flex gap-2">
+                        <Button size="sm" onClick={()=>{ setEditing(v); form.reset({ make: v.make, model: rawModel, licensePlate: v.licensePlate, state: v.state, parkingSlot: v.parkingSlot ?? "" }); setDialogOpen(true); }}>{t("common.edit")}</Button>
+                        <Button size="sm" variant="destructive" onClick={()=>{ if(!window.confirm(t("common.delete") + " vehicle?")) return; remove.mutate(v.id); }}>{t("common.delete")}</Button>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
               </TableBody>
             </Table>
           </div>
@@ -98,48 +143,101 @@ export default function VehiclesPage(){
       </Card>
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent>
+        <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>{editing ? "Edit Vehicle" : "New Vehicle"}</DialogTitle>
+            <DialogTitle className="text-2xl font-bold text-slate-900">{editing ? t("vehicles.editVehicle") : t("vehicles.newVehicle")}</DialogTitle>
           </DialogHeader>
           <Form {...form}>
             <form onSubmit={form.handleSubmit((values)=>{
+              const norm = (s: string) => String(s || '').replace(/\s+/g, '').toUpperCase();
+              const targetPlate = norm(values.licensePlate || "");
+              const isDup = (q.data?.items ?? []).some((v: any) => v.id !== editing?.id && norm(v.licensePlate) === targetPlate);
+              if (!editing && isDup) {
+                toast.error(t("vehicles.validationDuplicate", { plate: values.licensePlate?.trim().toUpperCase() }));
+                return;
+              }
+              if (!validateIndianLicensePlate(values.licensePlate || "")) {
+                toast.error(t("vehicles.validationInvalidPlate"));
+                return;
+              }
+              if (!validateVehicleBrandModel(values.make || "")) {
+                toast.error(t("vehicles.validationInvalidBrand"));
+                return;
+              }
               if (editing) {
                 update.mutate({ id: editing.id, data: values });
               } else {
                 create.mutate(values);
               }
               setDialogOpen(false);
-            })}>
-              <div className="grid gap-2">
+            })} className="space-y-4 pt-2">
+              <div className="grid grid-cols-2 gap-4">
                 <FormItem>
-                  <FormLabel>Make</FormLabel>
+                  <FormLabel className="font-semibold text-slate-800">{t("vehicles.brandMake")}</FormLabel>
                   <FormControl>
-                    <Input {...form.register("make")} />
+                    <Input
+                      placeholder={t("vehicles.brandMakePlaceholder")}
+                      maxLength={30}
+                      required
+                      value={form.watch("make") || ""}
+                      onChange={(e) => {
+                        const formatted = e.target.value.replace(/[^A-Za-z0-9\s\-\.]/g, "").slice(0, 30);
+                        form.setValue("make", formatted);
+                      }}
+                    />
                   </FormControl>
                 </FormItem>
                 <FormItem>
-                  <FormLabel>Model</FormLabel>
+                  <FormLabel className="font-semibold text-slate-800">{t("vehicles.model")}</FormLabel>
                   <FormControl>
-                    <Input {...form.register("model")} />
+                    <Input
+                      placeholder={t("vehicles.modelPlaceholder")}
+                      maxLength={30}
+                      value={form.watch("model") || ""}
+                      onChange={(e) => {
+                        const formatted = e.target.value.replace(/[^A-Za-z0-9\s\-\.]/g, "").slice(0, 30);
+                        form.setValue("model", formatted);
+                      }}
+                    />
+                  </FormControl>
+                </FormItem>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <FormItem>
+                  <FormLabel className="font-semibold text-slate-800">{t("vehicles.licensePlate")} *</FormLabel>
+                  <FormControl>
+                    <Input
+                      placeholder={t("vehicles.licensePlatePlaceholder")}
+                      maxLength={13}
+                      required
+                      value={form.watch("licensePlate") || ""}
+                      onChange={(e) => {
+                        const formatted = e.target.value.toUpperCase().replace(/[^A-Z0-9\s]/g, "").slice(0, 13);
+                        form.setValue("licensePlate", formatted);
+                      }}
+                    />
                   </FormControl>
                 </FormItem>
                 <FormItem>
-                  <FormLabel>License Plate</FormLabel>
+                  <FormLabel className="font-semibold text-slate-800">{t("vehicles.stateRegion")}</FormLabel>
                   <FormControl>
-                    <Input {...form.register("licensePlate")} />
+                    <Input placeholder="AP" maxLength={10} {...form.register("state")} />
                   </FormControl>
                 </FormItem>
-                <FormItem>
-                  <FormLabel>State</FormLabel>
-                  <FormControl>
-                    <Input {...form.register("state")} />
-                  </FormControl>
-                </FormItem>
-                <div className="flex gap-2 justify-end">
-                  <Button type="button" variant="outline" onClick={()=>setDialogOpen(false)}>Cancel</Button>
-                  <Button type="submit">Save</Button>
-                </div>
+              </div>
+              <FormItem>
+                <FormLabel className="font-semibold text-slate-800">{t("vehicles.parkingSlotLabel")}</FormLabel>
+                <FormControl>
+                  <Input placeholder="Slot A-1" {...form.register("parkingSlot")} />
+                </FormControl>
+              </FormItem>
+              <div className="flex gap-3 justify-end pt-4">
+                <Button type="button" variant="outline" className="h-11 rounded-2xl border-slate-200 bg-white hover:bg-slate-50 text-slate-700 font-medium px-6 shadow-2xs" onClick={()=>setDialogOpen(false)}>
+                  {t("common.cancel")}
+                </Button>
+                <Button type="submit" className="h-11 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white font-semibold px-6 shadow-md shadow-blue-500/20" disabled={create.isPending || update.isPending}>
+                  {create.isPending || update.isPending ? t("vehicles.saving") : t("vehicles.saveVehicle")}
+                </Button>
               </div>
             </form>
           </Form>

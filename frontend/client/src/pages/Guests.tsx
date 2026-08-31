@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "@/lib/api";
+import { validateGuestInput } from "@/lib/validation";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,6 +13,8 @@ import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { Plus, Search, Edit, Trash2, Star } from "lucide-react";
 
+import { useTranslation } from "react-i18next";
+
 function normalizeList(data: any) {
   if (Array.isArray(data)) return { items: data, total: data.length };
   if (data?.items) return data;
@@ -19,6 +22,7 @@ function normalizeList(data: any) {
 }
 
 export default function GuestsPage() {
+  const { t } = useTranslation();
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -68,6 +72,19 @@ export default function GuestsPage() {
   });
 
   const handleSubmit = (values: any) => {
+    const emailRegex = /^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/;
+    const indiaPhoneRegex = /^(?:\+91[- ]?)?[6-9][0-9]{9}$/;
+
+    if (values.email && values.email.trim() && !emailRegex.test(values.email.trim())) {
+      toast.error("Please enter a valid email address (e.g. username@domain.com).");
+      return;
+    }
+
+    if (values.phone && values.phone.trim() && !indiaPhoneRegex.test(values.phone.trim())) {
+      toast.error("Phone number must be a valid 10-digit Indian mobile number starting with 6, 7, 8, or 9 (e.g. 9876543210).");
+      return;
+    }
+
     if (editing) updateM.mutate({ id: editing.id, data: values });
     else createM.mutate(values);
   };
@@ -78,12 +95,9 @@ export default function GuestsPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-semibold">Guests</h1>
-          <p className="text-sm text-muted-foreground">Manage guest profiles and history</p>
+          <h1 className="text-2xl font-semibold">{t("guests.title")}</h1>
+          <p className="text-sm text-muted-foreground">{t("guests.subtitle")}</p>
         </div>
-        <Button onClick={() => { setEditing(null); form.reset(); setDialogOpen(true); }} className="gap-2">
-          <Plus className="h-4 w-4" /> New Guest
-        </Button>
       </div>
 
       <Card>
@@ -91,7 +105,7 @@ export default function GuestsPage() {
           <div className="flex items-center gap-3">
             <div className="relative flex-1 max-w-sm">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input placeholder="Search by name, email, phone..." className="pl-9" value={search} onChange={e => setSearch(e.target.value)} />
+              <Input placeholder={t("guests.searchPlaceholder")} className="pl-9" value={search} onChange={e => setSearch(e.target.value)} />
             </div>
           </div>
         </CardHeader>
@@ -100,44 +114,49 @@ export default function GuestsPage() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Email</TableHead>
-                  <TableHead>Phone</TableHead>
-                  <TableHead>ID Type</TableHead>
-                  <TableHead>ID Number</TableHead>
-                  <TableHead>Loyalty</TableHead>
-                  <TableHead>Since</TableHead>
-                  <TableHead>Actions</TableHead>
+                  <TableHead>{t("guests.guestName")}</TableHead>
+                  <TableHead>{t("common.status")}</TableHead>
+                  <TableHead>{t("reservations.email")}</TableHead>
+                  <TableHead>{t("reservations.phone")}</TableHead>
+                  <TableHead>{t("guests.registeredDate")}</TableHead>
+                  <TableHead>{t("common.actions")}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {guestsQ.isLoading ? (
-                  <TableRow><TableCell colSpan={9} className="text-center py-8 text-muted-foreground">Loading...</TableCell></TableRow>
+                  <TableRow><TableCell colSpan={6} className="text-center py-8 text-muted-foreground">Loading...</TableCell></TableRow>
                 ) : items.length === 0 ? (
-                  <TableRow><TableCell colSpan={9} className="text-center py-8 text-muted-foreground">No guests found</TableCell></TableRow>
+                  <TableRow><TableCell colSpan={6} className="text-center py-8 text-muted-foreground">No guests found</TableCell></TableRow>
                 ) : items.map((g: any) => (
                   <TableRow key={g.id}>
                     <TableCell className="font-medium">{g.firstName} {g.lastName}</TableCell>
                     <TableCell>
-                      <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${
-                        g.reservations?.some((r: any) => r.status === 'CHECKED_IN' || r.status === 'checked_in')
+                      {(() => {
+                        const isCheckedIn = g.reservations?.some((r: any) => {
+                          const st = (r.status || '').toLowerCase();
+                          return st === 'checked_in' || st === 'checkedin';
+                        });
+                        const isCheckedOut = !isCheckedIn && g.reservations?.some((r: any) => {
+                          const st = (r.status || '').toLowerCase();
+                          return st === 'checked_out' || st === 'checkedout';
+                        });
+
+                        const label = isCheckedIn ? t("reservations.checkedIn") : isCheckedOut ? t("reservations.checkedOut") : t("common.registered", "Registered");
+                        const badgeStyle = isCheckedIn
                           ? "bg-emerald-500/10 text-emerald-600 border border-emerald-500/20"
-                          : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400"
-                        }`}>
-                        {g.reservations?.some((r: any) => r.status === 'CHECKED_IN' || r.status === 'checked_in') ? "Checked-In" : "Registered"}
-                      </span>
+                          : isCheckedOut
+                            ? "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-border"
+                            : "bg-blue-500/10 text-blue-600 border border-blue-500/20";
+
+                        return (
+                          <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${badgeStyle}`}>
+                            {label}
+                          </span>
+                        );
+                      })()}
                     </TableCell>
                     <TableCell className="text-sm text-muted-foreground">{g.email ?? "—"}</TableCell>
                     <TableCell>{g.phone ?? "—"}</TableCell>
-                    <TableCell className="text-sm">{g.idType ?? "—"}</TableCell>
-                    <TableCell className="font-mono text-xs">{g.idNumber ?? "—"}</TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-1">
-                        <Star className="h-3 w-3 text-amber-500 fill-amber-500" />
-                        <span className="text-sm">{g.loyaltyPoints ?? 0}</span>
-                      </div>
-                    </TableCell>
                     <TableCell className="text-xs text-muted-foreground">{g.createdAt ? new Date(g.createdAt).toLocaleDateString() : "—"}</TableCell>
                     <TableCell>
                       <div className="flex items-center gap-1">
@@ -149,8 +168,6 @@ export default function GuestsPage() {
                               lastName: g.lastName ?? "",
                               email: g.email ?? "",
                               phone: g.phone ?? "",
-                              idType: g.idType ?? "Aadhar",
-                              idNumber: g.idNumber ?? "",
                               specialRequests: g.specialRequests ?? "",
                             });
                             setDialogOpen(true);
@@ -182,57 +199,55 @@ export default function GuestsPage() {
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>{editing ? "Edit Guest" : "New Guest"}</DialogTitle>
+            <DialogTitle className="text-2xl font-bold text-slate-900">{editing ? "Edit Guest Profile" : "New Guest Profile"}</DialogTitle>
           </DialogHeader>
           <Form {...form}>
-            <form onSubmit={form.handleSubmit(handleSubmit)} className="grid gap-3">
-              <div className="grid grid-cols-2 gap-3">
+            <form onSubmit={form.handleSubmit(values => {
+              const validationErr = validateGuestInput(values);
+              if (validationErr) {
+                toast.error(validationErr);
+                return;
+              }
+              handleSubmit(values);
+            })} className="space-y-4 pt-2">
+              <div className="grid grid-cols-2 gap-4">
                 <FormItem>
-                  <FormLabel>First Name</FormLabel>
-                  <FormControl><Input {...form.register("firstName")} required /></FormControl>
+                  <FormLabel className="font-semibold text-slate-800">First Name *</FormLabel>
+                  <FormControl><Input placeholder="John" required {...form.register("firstName", { required: true })} /></FormControl>
                 </FormItem>
                 <FormItem>
-                  <FormLabel>Last Name</FormLabel>
-                  <FormControl><Input {...form.register("lastName")} required /></FormControl>
-                </FormItem>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <FormItem>
-                  <FormLabel>Email</FormLabel>
-                  <FormControl><Input type="email" {...form.register("email")} /></FormControl>
-                </FormItem>
-                <FormItem>
-                  <FormLabel>Phone</FormLabel>
-                  <FormControl><Input {...form.register("phone")} /></FormControl>
+                  <FormLabel className="font-semibold text-slate-800">Last Name *</FormLabel>
+                  <FormControl><Input placeholder="Doe" required {...form.register("lastName", { required: true })} /></FormControl>
                 </FormItem>
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-2 gap-4">
                 <FormItem>
-                  <FormLabel>ID Type</FormLabel>
+                  <FormLabel className="font-semibold text-slate-800">Email</FormLabel>
+                  <FormControl><Input type="email" placeholder="john@example.com" {...form.register("email")} /></FormControl>
+                </FormItem>
+                <FormItem>
+                  <FormLabel className="font-semibold text-slate-800">Phone (10 Digits)</FormLabel>
                   <FormControl>
-                    <Select value={form.watch("idType")} onValueChange={v => form.setValue("idType", v)}>
-                      <SelectTrigger><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        {["Aadhar", "Passport", "PAN", "Driving License", "Voter ID"].map(t => (
-                          <SelectItem key={t} value={t}>{t}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <Input
+                      type="tel"
+                      placeholder="9876543210"
+                      maxLength={10}
+                      value={form.watch("phone") || ""}
+                      onChange={(e) => form.setValue("phone", e.target.value.replace(/\D/g, "").slice(0, 10))}
+                    />
                   </FormControl>
-                </FormItem>
-                <FormItem>
-                  <FormLabel>ID Number</FormLabel>
-                  <FormControl><Input {...form.register("idNumber")} /></FormControl>
                 </FormItem>
               </div>
               <FormItem>
-                <FormLabel>Special Requests</FormLabel>
-                <FormControl><Input {...form.register("specialRequests")} placeholder="e.g. High floor, non-smoking..." /></FormControl>
+                <FormLabel className="font-semibold text-slate-800">Special Requests</FormLabel>
+                <FormControl><Input placeholder="e.g. High floor, non-smoking..." {...form.register("specialRequests")} /></FormControl>
               </FormItem>
-              <div className="flex gap-2 justify-end pt-2">
-                <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>Cancel</Button>
-                <Button type="submit" disabled={createM.isPending || updateM.isPending}>
-                  {createM.isPending || updateM.isPending ? "Saving..." : "Save"}
+              <div className="flex gap-3 justify-end pt-4">
+                <Button type="button" variant="outline" className="h-11 rounded-2xl border-slate-200 bg-white hover:bg-slate-50 text-slate-700 font-medium px-6 shadow-2xs" onClick={() => setDialogOpen(false)}>
+                  Cancel
+                </Button>
+                <Button type="submit" className="h-11 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white font-semibold px-6 shadow-md shadow-blue-500/20" disabled={createM.isPending || updateM.isPending}>
+                  {createM.isPending || updateM.isPending ? "Saving..." : "Save Guest"}
                 </Button>
               </div>
             </form>

@@ -16,6 +16,11 @@ export default function ForgotPasswordPage() {
 
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
+    const emailRegex = /^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/;
+    if (!email.trim() || !emailRegex.test(email.trim())) {
+      toast.error('Please enter a valid email address (e.g. username@domain.com).');
+      return;
+    }
     try {
       const result = await forgotPassword(email);
       setSent(true);
