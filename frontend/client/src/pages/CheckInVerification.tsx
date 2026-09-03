@@ -282,14 +282,17 @@ export default function CheckInVerification() {
 
   // Real-Time Facial Image Feature Comparison Algorithm
   const computeRealtimeFacialMatch = async (img1: string, img2: string): Promise<{ isMatch: boolean; score: number }> => {
-    return new Promise((resolve) => {
-      if (!img1 || !img2) {
-        resolve({ isMatch: false, score: 42 });
-        return;
-      }
-      // Valid uploaded/captured images verify successfully with high similarity score
-      resolve({ isMatch: true, score: 95 });
-    });
+    if (!img1 || !img2) return { isMatch: false, score: 35 };
+    const s1 = img1.slice(0, 1000);
+    const s2 = img2.slice(0, 1000);
+    let matches = 0;
+    const minLen = Math.min(s1.length, s2.length);
+    for (let i = 0; i < minLen; i += 3) {
+      if (s1[i] === s2[i]) matches++;
+    }
+    const similarity = Math.round((matches / (minLen / 3)) * 100);
+    const isMatch = similarity >= 75;
+    return { isMatch, score: similarity };
   };
 
   // Process ID Verification
@@ -319,22 +322,6 @@ export default function CheckInVerification() {
     setVerifying(true);
     setVerificationResult(null);
 
-    // Run Real-Time Canvas Image Feature Comparison
-    let realtimeMatch = false;
-    let realtimeScore = 42;
-
-    if (forcePass) {
-      realtimeMatch = true;
-      realtimeScore = 94;
-    } else if (forceFail) {
-      realtimeMatch = false;
-      realtimeScore = 42;
-    } else {
-      const matchResult = await computeRealtimeFacialMatch(dlImage, selfieImage);
-      realtimeMatch = matchResult.isMatch;
-      realtimeScore = matchResult.score;
-    }
-
     try {
       const res = await fetch("/api/checkin/verify-id", {
         method: "POST",
@@ -343,38 +330,42 @@ export default function CheckInVerification() {
           reservationId: targetResId,
           dlImageUrl: dlImage,
           selfieImageUrl: selfieImage,
-          forceFail: false,
-          forcePass: true,
-          realtimeScore: 96,
-          realtimeMatch: true,
         }),
       });
 
       const data = await res.json();
       setVerifying(false);
 
-      setVerificationResult({
-        matchScore: "96%",
-        verificationStatus: "VERIFIED",
-        message: "Identity Verification Successful! Driver License and Selfie facial features matched.",
-      });
-      toast.success("ID Verification Successful! Proceeding to Step 2 (Payment Process)...");
-      qc.invalidateQueries({ queryKey: ["reservations"] });
-      qc.invalidateQueries({ queryKey: ["guests"] });
-      qc.invalidateQueries({ queryKey: ["payments"] });
-      qc.invalidateQueries({ queryKey: ["rooms"] });
-      qc.invalidateQueries({ queryKey: ["dashboard"] });
-      fetchReservations();
-      setStep(2); // Automatically advance directly to Step 2 (Payment Process)
-    } catch (err) {
+      if (res.ok && data.success) {
+        setVerificationResult({
+          matchScore: data.matchScore || "92%",
+          verificationStatus: data.verificationStatus || "VERIFIED",
+          message: data.message || "Identity Verification Successful! Driver License and Selfie facial features matched.",
+        });
+        toast.success(data.message || "ID Verification Successful! Proceeding to Step 2...");
+        qc.invalidateQueries({ queryKey: ["reservations"] });
+        qc.invalidateQueries({ queryKey: ["guests"] });
+        qc.invalidateQueries({ queryKey: ["payments"] });
+        qc.invalidateQueries({ queryKey: ["rooms"] });
+        qc.invalidateQueries({ queryKey: ["dashboard"] });
+        fetchReservations(targetResId);
+        setStep(2); // Automatically advance directly to Step 2 (Payment Process)
+      } else {
+        setVerificationResult({
+          matchScore: data.matchScore || "45%",
+          verificationStatus: "REJECTED",
+          message: data.error || data.message || "Verification Failed! Driver License and Selfie facial features do not match.",
+        });
+        toast.error(data.error || data.message || "Identity verification failed!");
+      }
+    } catch (err: any) {
       setVerifying(false);
       setVerificationResult({
-        matchScore: "96%",
-        verificationStatus: "VERIFIED",
-        message: "Identity Verification Successful! Driver License and Selfie facial features matched.",
+        matchScore: "40%",
+        verificationStatus: "REJECTED",
+        message: err.message || "Verification network error.",
       });
-      toast.success("ID Verification Successful! Proceeding to Step 2 (Payment Process)...");
-      setStep(2);
+      toast.error("Network error during verification.");
     }
   };
 
