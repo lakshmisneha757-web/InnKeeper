@@ -345,7 +345,11 @@
     "status": "Payment Status",
     "date": "Transaction Date",
     "notes": "Notes",
-    "noPayments": "No payment transactions recorded"
+    "noPayments": "No payment transactions recorded",
+    "paid": "Paid",
+    "pending": "Pending",
+    "refunded": "Refunded",
+    "failed": "Failed"
   },
   "housekeeping": {
     "title": "Housekeeping Management",
