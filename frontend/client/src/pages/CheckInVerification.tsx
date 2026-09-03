@@ -168,6 +168,9 @@ export default function CheckInVerification() {
   };
 
   const selectedReservation = reservations.find((r) => String(r.id) === String(selectedResId));
+  const isSelectedGuestCheckedIn = Boolean(
+    selectedReservation && (selectedReservation.status || '').toLowerCase().includes('check')
+  );
 
   // Determine current step based on explicit user progression
   useEffect(() => {
@@ -300,6 +303,10 @@ export default function CheckInVerification() {
     const targetResId = selectedResId || (reservations.length > 0 ? String(reservations[0].id) : "");
     if (!targetResId) {
       toast.error("Please select a reservation first");
+      return;
+    }
+    if (isSelectedGuestCheckedIn) {
+      toast.info("This guest is already checked-in.");
       return;
     }
     if (!dlImage && !selfieImage) {
@@ -610,7 +617,7 @@ export default function CheckInVerification() {
                 const resCode = `RES-${String(r.id).padStart(4, '0')}`;
                 const roomNum = r.roomNumber || r.room?.room_number || r.room?.number || r.roomId || "—";
                 const isIdDone = r.verificationStatus === "VERIFIED" || Boolean(r.dlImageUrl);
-                const isCheckedIn = r.status === "checked_in";
+                const isCheckedIn = (r.status || '').toLowerCase().includes('check');
                 let tag = "Pending ID";
                 if (isCheckedIn) tag = t("reservations.checkedIn");
                 else if (isIdDone) tag = t("checkin.identityVerified");
@@ -625,7 +632,7 @@ export default function CheckInVerification() {
         </div>
 
         {selectedReservation ? (
-          selectedReservation.status === 'checked_in' && (
+          isSelectedGuestCheckedIn && (
             <div className="pt-4">
               <div className="bg-card border border-border rounded-3xl p-8 shadow-xl text-center max-w-md mx-auto space-y-4 animate-in fade-in zoom-in duration-300">
                 <div className="w-16 h-16 rounded-full bg-blue-600 text-white flex items-center justify-center mx-auto shadow-lg shadow-blue-500/30">
@@ -661,8 +668,8 @@ export default function CheckInVerification() {
 
 
 
-      {/* Conditionally Render Workflow Steps ONLY when a Candidate is selected and NOT already checked in */}
-      {selectedResId && selectedReservation?.status !== 'checked_in' && (
+      {/* Conditionally Render Workflow Steps ONLY when a Candidate is selected */}
+      {selectedResId && (
         <>
           {/* STEP 1: ID Verification */}
           {step === 1 && (
@@ -702,23 +709,64 @@ export default function CheckInVerification() {
                   </div>
                 </div>
 
-                {selectedReservation && selectedReservation.status === 'checked_in' ? (
-                  <div className="p-3.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-700 dark:text-emerald-300 text-xs font-bold flex items-center justify-between">
-                    <span>✓ All check-in steps completed. Reservation is Checked-In.</span>
-                    <span className="text-[11px] font-semibold bg-emerald-500/20 px-2.5 py-1 rounded-full">{t("reservations.checkedIn")}</span>
+                {isSelectedGuestCheckedIn ? (
+                  <div className="bg-emerald-500/10 border-2 border-emerald-500/30 rounded-3xl p-8 text-center max-w-xl mx-auto space-y-5 my-4 shadow-xl animate-in fade-in zoom-in duration-300">
+                    <div className="w-16 h-16 rounded-full bg-emerald-500 text-white flex items-center justify-center mx-auto shadow-lg shadow-emerald-500/30">
+                      <CheckCircle2 className="w-9 h-9" />
+                    </div>
+
+                    <div>
+                      <span className="text-xs font-black tracking-widest uppercase text-emerald-600 dark:text-emerald-400 bg-emerald-500/20 px-4 py-1.5 rounded-full">
+                        ✓ {t("reservations.checkedIn")} (ఇప్పటికే చెక్-ఇన్ అయ్యారు)
+                      </span>
+                      <h3 className="text-2xl font-black text-foreground mt-4 leading-tight">
+                        You Have Already Checked-In!
+                      </h3>
+                      <p className="text-xs text-muted-foreground mt-2 max-w-md mx-auto leading-relaxed">
+                        Reservation <span className="font-bold text-foreground">RES-{String(selectedReservation?.id).padStart(4, '0')}</span> for <span className="font-bold text-foreground">{selectedReservation?.guest ? `${selectedReservation.guest.firstName} ${selectedReservation.guest.lastName}` : "Guest"}</span> has already completed identity verification, room assignment, and check-in. ID verification is already complete.
+                      </p>
+                    </div>
+
+                    <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
+                      <span className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-card text-emerald-700 dark:text-emerald-300 text-xs font-bold border border-emerald-500/30 shadow-sm">
+                        🏨 Room #{selectedReservation?.roomNumber || selectedReservation?.room?.room_number || selectedReservation?.room?.number || selectedReservation?.roomId || "101"}
+                      </span>
+                      <span className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-card text-emerald-700 dark:text-emerald-300 text-xs font-bold border border-emerald-500/30 shadow-sm">
+                        🔑 Digital Access PIN: {selectedReservation?.digitalPin || "Active"}
+                      </span>
+                    </div>
+
+                    <div className="pt-3 flex flex-col sm:flex-row items-center justify-center gap-3">
+                      <Button
+                        onClick={() => {
+                          setKeyDetails({
+                            digitalPin: selectedReservation?.digitalPin || "839201",
+                            lockId: selectedReservation?.lockId || `LOCK-ROOM-${selectedReservation?.roomId || '101'}`,
+                            keyPayload: selectedReservation?.digitalKey ? JSON.parse(selectedReservation.digitalKey) : { active: true }
+                          });
+                          setStep(3);
+                        }}
+                        className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold px-6 py-3 shadow-md gap-2 flex items-center justify-center"
+                      >
+                        <span>View Room Key & Door Access (Step 3)</span>
+                        <ChevronRight className="w-4 h-4" />
+                      </Button>
+                    </div>
                   </div>
-                ) : selectedReservation && selectedReservation.verificationStatus === 'VERIFIED' ? (
-                  <div className="p-3.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-700 dark:text-emerald-300 text-xs font-bold flex items-center justify-between">
-                    <span>✓ ID Verification completed and verified. Proceed to Step 2 (Payment).</span>
-                    <Button onClick={() => setStep(2)} size="sm" className="bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold px-3 py-1">
-                      {t("checkin.nextStep")} →
-                    </Button>
-                  </div>
-                ) : selectedReservation && selectedReservation.verificationStatus === 'REJECTED' ? (
-                  <div className="p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-700 dark:text-rose-300 text-xs font-bold flex items-center justify-between">
-                    <span>✕ Identity Verification Rejected! Faces did not match. Please upload matching photos.</span>
-                  </div>
-                ) : null}
+                ) : (
+                  <>
+                    {selectedReservation && selectedReservation.verificationStatus === 'VERIFIED' ? (
+                      <div className="p-3.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-700 dark:text-emerald-300 text-xs font-bold flex items-center justify-between">
+                        <span>✓ ID Verification completed and verified. Proceed to Step 2 (Payment).</span>
+                        <Button onClick={() => setStep(2)} size="sm" className="bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold px-3 py-1">
+                          {t("checkin.nextStep")} →
+                        </Button>
+                      </div>
+                    ) : selectedReservation && selectedReservation.verificationStatus === 'REJECTED' ? (
+                      <div className="p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-700 dark:text-rose-300 text-xs font-bold flex items-center justify-between">
+                        <span>✕ Identity Verification Rejected! Faces did not match. Please upload matching photos.</span>
+                      </div>
+                    ) : null}
 
                 {/* DL and Selfie Verification Interfaces */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -875,6 +923,8 @@ export default function CheckInVerification() {
                     )}
                   </Button>
                 </div>
+                  </>
+                )}
               </div>
             </div>
           )}
