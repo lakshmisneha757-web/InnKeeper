@@ -108,10 +108,12 @@ export async function updateRoomNew(req, res) {
           }
         });
         for (const r of confirmedRes) {
-          await prisma.reservation.update({
-            where: { id: r.id },
-            data: { status: 'checked_in', verificationStatus: 'VERIFIED' }
-          });
+          if (r.verificationStatus === 'VERIFIED') {
+            await prisma.reservation.update({
+              where: { id: r.id },
+              data: { status: 'checked_in' }
+            });
+          }
         }
       }
     }
