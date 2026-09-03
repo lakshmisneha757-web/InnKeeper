@@ -262,7 +262,7 @@ export default function SignupPage() {
               <p className="mt-2 text-sm text-slate-600">Create a polished account for your hospitality team.</p>
             </div>
 
-            <form onSubmit={handleSubmit} className="space-y-4" noValidate>
+            <form onSubmit={handleSubmit} className="space-y-4" noValidate autoComplete="off">
               <div className="space-y-2">
                 <Label htmlFor="name">Full Name</Label>
                 <Input
@@ -271,6 +271,7 @@ export default function SignupPage() {
                   onChange={(e) => handleChange('name', e.target.value)}
                   onBlur={() => handleBlur('name')}
                   placeholder="Taylor Brooks"
+                  autoComplete="off"
                 />
                 {errors.name ? <p className="text-sm text-red-500">{errors.name}</p> : null}
               </div>
@@ -287,6 +288,7 @@ export default function SignupPage() {
                     onBlur={() => handleBlur('email')}
                     className="pl-10"
                     placeholder="you@innkeeper.com"
+                    autoComplete="off"
                   />
                 </div>
                 {errors.email ? <p className="text-sm text-red-500">{errors.email}</p> : null}
@@ -322,6 +324,7 @@ export default function SignupPage() {
                       onBlur={() => handleBlur('phone')}
                       className="h-10 border-0 rounded-l-none pl-3 shadow-none focus-visible:ring-0"
                       placeholder={`e.g. ${selectedCountry.placeholder}`}
+                      autoComplete="off"
                     />
                   </div>
                 </div>
@@ -339,6 +342,7 @@ export default function SignupPage() {
                       onChange={(e) => handleChange('password', e.target.value)}
                       onBlur={() => handleBlur('password')}
                       placeholder="Create password"
+                      autoComplete="new-password"
                     />
                     <button type="button" onClick={() => setShowPassword((prev) => !prev)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700">
                       {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
@@ -356,6 +360,7 @@ export default function SignupPage() {
                       onChange={(e) => handleChange('confirmPassword', e.target.value)}
                       onBlur={() => handleBlur('confirmPassword')}
                       placeholder="Confirm password"
+                      autoComplete="new-password"
                     />
                     <button type="button" onClick={() => setShowConfirmPassword((prev) => !prev)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700">
                       {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
