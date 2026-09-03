@@ -707,12 +707,16 @@ export default function CheckInVerification() {
                     <span>✓ All check-in steps completed. Reservation is Checked-In.</span>
                     <span className="text-[11px] font-semibold bg-emerald-500/20 px-2.5 py-1 rounded-full">{t("reservations.checkedIn")}</span>
                   </div>
-                ) : selectedReservation && (selectedReservation.verificationStatus === 'VERIFIED' || selectedReservation.dlImageUrl) ? (
-                  <div className="p-3.5 rounded-xl bg-blue-500/10 border border-blue-500/30 text-blue-700 dark:text-blue-300 text-xs font-bold flex items-center justify-between">
-                    <span>✓ ID Verification completed. Complete the Check-In Process (Step 2: Payment).</span>
+                ) : selectedReservation && selectedReservation.verificationStatus === 'VERIFIED' ? (
+                  <div className="p-3.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-700 dark:text-emerald-300 text-xs font-bold flex items-center justify-between">
+                    <span>✓ ID Verification completed and verified. Proceed to Step 2 (Payment).</span>
                     <Button onClick={() => setStep(2)} size="sm" className="bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold px-3 py-1">
                       {t("checkin.nextStep")} →
                     </Button>
+                  </div>
+                ) : selectedReservation && selectedReservation.verificationStatus === 'REJECTED' ? (
+                  <div className="p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-700 dark:text-rose-300 text-xs font-bold flex items-center justify-between">
+                    <span>✕ Identity Verification Rejected! Faces did not match. Please upload matching photos.</span>
                   </div>
                 ) : null}
 
