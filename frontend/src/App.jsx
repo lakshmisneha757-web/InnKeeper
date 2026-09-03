@@ -14,17 +14,42 @@ import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 
 function App() {
-  const [isLoggedIn, setIsLoggedIn] = useState(() => {
-    // Clear legacy auto-login from localStorage if present
-    localStorage.removeItem('innkeeper-auth');
-    return sessionStorage.getItem('innkeeper-session') === 'true';
-  });
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [isCheckingAuth, setIsCheckingAuth] = useState(true);
 
   useEffect(() => {
-    const onStorage = () => setIsLoggedIn(sessionStorage.getItem('innkeeper-session') === 'true');
-    window.addEventListener('storage', onStorage);
-    return () => window.removeEventListener('storage', onStorage);
+    // Validate session with backend
+    const checkAuth = async () => {
+      const token = sessionStorage.getItem('innkeeper-token');
+      try {
+        const res = await fetch('/api/auth/me', {
+          headers: token ? { Authorization: `Bearer ${token}` } : {}
+        });
+        if (res.ok) {
+          setIsLoggedIn(true);
+          sessionStorage.setItem('innkeeper-session', 'true');
+        } else {
+          setIsLoggedIn(false);
+          sessionStorage.removeItem('innkeeper-session');
+          sessionStorage.removeItem('innkeeper-token');
+        }
+      } catch (err) {
+        setIsLoggedIn(false);
+      } finally {
+        setIsCheckingAuth(false);
+      }
+    };
+
+    checkAuth();
   }, []);
+
+  if (isCheckingAuth) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-slate-900 text-white font-medium">
+        Loading session...
+      </div>
+    );
+  }
 
   return (
     <>

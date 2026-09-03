@@ -1,6 +1,7 @@
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
+import crypto from 'crypto';
 
 const prisma = new PrismaClient();
 const JWT_SECRET = process.env.JWT_SECRET || 'innkeeper-super-secret-key-change-in-production';
@@ -9,7 +10,7 @@ const JWT_EXPIRES_IN = '7d';
 const COOKIE_NAME = 'innkeeper_session';
 const COOKIE_OPTS = {
   httpOnly: true,
-  sameSite: 'lax',
+  sameSite: 'strict',
   maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
   secure: process.env.NODE_ENV === 'production',
 };
@@ -168,15 +169,11 @@ export async function forgotPassword(req, res) {
       return res.status(200).json({ message: 'If that email exists, a reset link has been sent.' });
     }
 
-    const resetToken = Math.random().toString(36).slice(2) + Date.now().toString(36);
+    const resetToken = crypto.randomBytes(32).toString('hex');
     resetTokens.set(resetToken, { userId: user.id, email, expiresAt: Date.now() + 3600_000 });
-
-    console.log(`[DEV] Password reset token for ${email}: ${resetToken}`);
 
     return res.status(200).json({
       message: 'If that email exists, a reset link has been sent.',
-      // Expose token in dev so the frontend reset page works without email infra
-      resetToken: process.env.NODE_ENV !== 'production' ? resetToken : undefined,
     });
   } catch (err) {
     console.error('Forgot password error:', err);
