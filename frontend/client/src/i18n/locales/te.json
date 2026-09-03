@@ -39,7 +39,9 @@
     "selectOption": "ఎంపికను ఎంచుకోండి",
     "required": "తప్పనిసరి",
     "optional": "ఐచ్ఛికం",
-    "registered": "నమోదైంది"
+    "registered": "నమోదైంది",
+    "open": "తెరిచి ఉంది",
+    "closed": "మూసివేయబడింది"
   },
   "navigation": {
     "dashboard": "డాష్‌బోర్డ్",

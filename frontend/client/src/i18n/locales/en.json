@@ -39,7 +39,9 @@
     "selectOption": "Select option",
     "required": "Required",
     "optional": "Optional",
-    "registered": "Registered"
+    "registered": "Registered",
+    "open": "Open",
+    "closed": "Closed"
   },
   "navigation": {
     "dashboard": "Dashboard",

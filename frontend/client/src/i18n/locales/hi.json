@@ -39,7 +39,9 @@
     "selectOption": "विकल्प चुनें",
     "required": "आवश्यक",
     "optional": "वैकल्पिक",
-    "registered": "पंजीकृत"
+    "registered": "पंजीकृत",
+    "open": "खुला है",
+    "closed": "बंद है"
   },
   "navigation": {
     "dashboard": "डैशबोर्ड",
