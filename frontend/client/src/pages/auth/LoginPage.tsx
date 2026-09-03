@@ -97,16 +97,6 @@ export default function LoginPage() {
                     value={role}
                     onValueChange={(val) => {
                       setRole(val);
-                      if (val === 'admin') {
-                        setEmail('admin@innkeeper.com');
-                        setPassword('admin123');
-                      } else if (val === 'manager') {
-                        setEmail('manager@innkeeper.com');
-                        setPassword('manager123');
-                      } else if (val === 'receptionist') {
-                        setEmail('staff@innkeeper.com');
-                        setPassword('staff123');
-                      }
                       setErrors({});
                     }}
                   >
@@ -114,9 +104,9 @@ export default function LoginPage() {
                       <SelectValue placeholder="Choose a Role (Admin, Manager, Staff)" />
                     </SelectTrigger>
                     <SelectContent className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xl rounded-2xl z-[9999]">
-                      <SelectItem value="admin" className="cursor-pointer font-medium">Admin (admin@innkeeper.com)</SelectItem>
-                      <SelectItem value="manager" className="cursor-pointer font-medium">Manager (manager@innkeeper.com)</SelectItem>
-                      <SelectItem value="receptionist" className="cursor-pointer font-medium">Receptionist / Staff (staff@innkeeper.com)</SelectItem>
+                      <SelectItem value="admin" className="cursor-pointer font-medium">Admin</SelectItem>
+                      <SelectItem value="manager" className="cursor-pointer font-medium">Manager</SelectItem>
+                      <SelectItem value="receptionist" className="cursor-pointer font-medium">Receptionist / Staff</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -125,7 +115,7 @@ export default function LoginPage() {
                   <Label htmlFor="email">Email</Label>
                   <div className="relative">
                     <Mail className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                    <Input id="email" type="email" placeholder="you@innkeeper.com" value={email} onChange={(e) => { setEmail(e.target.value); setErrors((prev) => ({ ...prev, email: undefined })); }} className="pl-10 rounded-2xl" autoComplete="email" />
+                    <Input id="email" type="email" placeholder="you@innkeeper.com" value={email} onChange={(e) => { setEmail(e.target.value); setErrors((prev) => ({ ...prev, email: undefined })); }} className="pl-10 rounded-2xl" autoComplete="off" />
                   </div>
                   <AnimatePresence mode="wait">
                     {errors.email ? <motion.p initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="text-sm text-red-500">{errors.email}</motion.p> : null}
@@ -136,7 +126,7 @@ export default function LoginPage() {
                   <Label htmlFor="password">Password</Label>
                   <div className="relative">
                     <Lock className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                    <Input id="password" type={showPassword ? 'text' : 'password'} placeholder="Enter your password" value={password} onChange={(e) => { setPassword(e.target.value); setErrors((prev) => ({ ...prev, password: undefined })); }} className="pl-10 pr-10 rounded-2xl" autoComplete="current-password" />
+                    <Input id="password" type={showPassword ? 'text' : 'password'} placeholder="Enter your password" value={password} onChange={(e) => { setPassword(e.target.value); setErrors((prev) => ({ ...prev, password: undefined })); }} className="pl-10 pr-10 rounded-2xl" autoComplete="new-password" />
                     <button type="button" onClick={() => setShowPassword((prev) => !prev)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700">
                       {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                     </button>
