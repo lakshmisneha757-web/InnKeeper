@@ -2,6 +2,7 @@ import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
+import { sendPasswordResetEmail } from '../utils/emailNotifier.js';
 
 const prisma = new PrismaClient();
 const JWT_SECRET = process.env.JWT_SECRET || 'innkeeper-super-secret-key-change-in-production';
@@ -163,17 +164,21 @@ export async function forgotPassword(req, res) {
     const { email } = req.body;
     if (!email) return res.status(400).json({ error: 'Email is required.' });
 
-    const user = await prisma.user.findUnique({ where: { email } });
+    const normalizedEmail = email.trim().toLowerCase();
+    const user = await prisma.user.findUnique({ where: { email: normalizedEmail } });
     if (!user) {
       // Security: don't reveal whether the email exists
-      return res.status(200).json({ message: 'If that email exists, a reset link has been sent.' });
+      return res.status(200).json({ message: 'If an account exists with that email, a password reset link has been sent.' });
     }
 
     const resetToken = crypto.randomBytes(32).toString('hex');
-    resetTokens.set(resetToken, { userId: user.id, email, expiresAt: Date.now() + 3600_000 });
+    resetTokens.set(resetToken, { userId: user.id, email: user.email, expiresAt: Date.now() + 3600_000 });
+
+    // Send real email via Nodemailer/SMTP
+    await sendPasswordResetEmail({ toEmail: user.email, resetToken });
 
     return res.status(200).json({
-      message: 'If that email exists, a reset link has been sent.',
+      message: 'If an account exists with that email, a password reset link has been sent.',
     });
   } catch (err) {
     console.error('Forgot password error:', err);
@@ -183,17 +188,32 @@ export async function forgotPassword(req, res) {
 
 export async function resetPassword(req, res) {
   try {
-    const { email, password, confirmPassword } = req.body;
-    if (!email || !password) return res.status(400).json({ error: 'Email and password are required.' });
+    const { email, token, password, confirmPassword } = req.body;
+    if (!password) return res.status(400).json({ error: 'New password is required.' });
     if (password !== confirmPassword) return res.status(400).json({ error: 'Passwords do not match.' });
 
-    const user = await prisma.user.findUnique({ where: { email: email.trim().toLowerCase() } });
-    if (!user) {
-      return res.status(404).json({ error: 'No account found with this email address.' });
+    let userIdToUpdate = null;
+
+    if (token && resetTokens.has(token)) {
+      const record = resetTokens.get(token);
+      if (record && record.expiresAt >= Date.now()) {
+        userIdToUpdate = record.userId;
+        resetTokens.delete(token);
+      } else {
+        return res.status(400).json({ error: 'Invalid or expired password reset token.' });
+      }
+    } else if (email) {
+      const user = await prisma.user.findUnique({ where: { email: email.trim().toLowerCase() } });
+      if (!user) {
+        return res.status(404).json({ error: 'No account found with this email address.' });
+      }
+      userIdToUpdate = user.id;
+    } else {
+      return res.status(400).json({ error: 'Invalid reset request. Missing token or email.' });
     }
 
     const hashed = await bcrypt.hash(password, 12);
-    await prisma.user.update({ where: { id: user.id }, data: { password: hashed } });
+    await prisma.user.update({ where: { id: userIdToUpdate }, data: { password: hashed } });
 
     return res.status(200).json({ message: 'Password reset successfully. Please log in.' });
   } catch (err) {

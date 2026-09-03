@@ -23,10 +23,10 @@ export default function ForgotPasswordPage() {
     }
     try {
       await forgotPassword(email.trim());
-      toast.success('Redirecting to password reset page...');
-      setLocation(`/reset-password?email=${encodeURIComponent(email.trim())}`);
+      setSent(true);
+      toast.success(`Password reset link sent to ${email.trim()}! Please check your email inbox.`);
     } catch (err: any) {
-      setLocation(`/reset-password?email=${encodeURIComponent(email.trim())}`);
+      toast.error(err?.response?.data?.error || 'Unable to send reset instructions.');
     }
   };
 
