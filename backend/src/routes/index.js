@@ -32,7 +32,12 @@ import { listCashLedger, createCashLedger, updateCashLedger, deleteCashLedger } 
 import { listShiftAudits, createShiftAudit, updateShiftAudit, deleteShiftAudit } from '../controllers/shiftAuditController.js';
 import { listHousekeeping, createHousekeeping, updateHousekeeping } from '../controllers/housekeepingController.js';
 import { listMaintenance, createMaintenance, updateMaintenance } from '../controllers/maintenanceController.js';
-import { listNotifications, createNotification, markRead } from '../controllers/notificationController.js';
+import {
+  listNotifications,
+  createNotification,
+  markRead,
+  clearNotifications
+} from '../controllers/notificationController.js';
 import { getAnalytics } from '../controllers/analyticsController.js';
 import { getDashboard } from '../controllers/dashboardController.js';
 import { getWeather } from '../controllers/weatherController.js';
@@ -126,6 +131,9 @@ router.put('/maintenance/:id', updateMaintenance);
 router.get('/notifications', listNotifications);
 router.post('/notifications', createNotification);
 router.post('/notifications/mark-read', markRead);
+router.put('/notifications', markRead);
+
+router.delete('/notifications', clearNotifications);
 
 // ─── Analytics / Dashboard ────────────────────────────────
 router.get('/analytics', getAnalytics);
