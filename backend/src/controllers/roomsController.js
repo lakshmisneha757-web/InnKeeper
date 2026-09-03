@@ -130,3 +130,118 @@ export async function deleteRoomNew(req, res) {
     res.status(500).json({ error: err.message });
   }
 }
+// ─── Housekeeping Room Status Actions ─────────────────────
+
+export async function startCleaning(req, res) {
+  try {
+    const roomId = Number(req.params.id);
+
+    const room = await prisma.room.update({
+      where: { id: roomId },
+      data: {
+        status: 'CLEANING_IN_PROGRESS',
+        last_updated: new Date(),
+      },
+    });
+
+    res.json({
+      success: true,
+      data: {
+        ...room,
+        roomNumber: room.room_number,
+      },
+    });
+  } catch (err) {
+    console.error('Failed to start cleaning:', err);
+    res.status(500).json({
+      success: false,
+      error: err.message,
+    });
+  }
+}
+
+export async function markRoomClean(req, res) {
+  try {
+    const roomId = Number(req.params.id);
+    const { notes } = req.body;
+
+    const room = await prisma.room.update({
+      where: { id: roomId },
+      data: {
+        status: 'CLEAN',
+        last_updated: new Date(),
+      },
+    });
+
+    res.json({
+      success: true,
+      data: {
+        ...room,
+        roomNumber: room.room_number,
+        cleaningNotes: notes || null,
+      },
+    });
+  } catch (err) {
+    console.error('Failed to mark room clean:', err);
+    res.status(500).json({
+      success: false,
+      error: err.message,
+    });
+  }
+}
+
+export async function markRoomDirty(req, res) {
+  try {
+    const roomId = Number(req.params.id);
+
+    const room = await prisma.room.update({
+      where: { id: roomId },
+      data: {
+        status: 'DIRTY',
+        last_updated: new Date(),
+      },
+    });
+
+    res.json({
+      success: true,
+      data: {
+        ...room,
+        roomNumber: room.room_number,
+      },
+    });
+  } catch (err) {
+    console.error('Failed to mark room dirty:', err);
+    res.status(500).json({
+      success: false,
+      error: err.message,
+    });
+  }
+}
+
+export async function markRoomInspected(req, res) {
+  try {
+    const roomId = Number(req.params.id);
+
+    const room = await prisma.room.update({
+      where: { id: roomId },
+      data: {
+        status: 'CLEAN',
+        last_updated: new Date(),
+      },
+    });
+
+    res.json({
+      success: true,
+      data: {
+        ...room,
+        roomNumber: room.room_number,
+      },
+    });
+  } catch (err) {
+    console.error('Failed to mark room inspected:', err);
+    res.status(500).json({
+      success: false,
+      error: err.message,
+    });
+  }
+}

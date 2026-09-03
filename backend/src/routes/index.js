@@ -13,7 +13,17 @@ import {
 } from '../controllers/distributionController.js';
 
 // New feature controllers
-import { listRoomsNew, getRoomNew, createRoomNew, updateRoomNew, deleteRoomNew } from '../controllers/roomsController.js';
+import {
+  listRoomsNew,
+  getRoomNew,
+  createRoomNew,
+  updateRoomNew,
+  deleteRoomNew,
+  startCleaning,
+  markRoomClean,
+  markRoomDirty,
+  markRoomInspected
+} from '../controllers/roomsController.js';
 import { listGuests, createGuest, updateGuest, deleteGuest } from '../controllers/guestController.js';
 import { listReservations, createReservation, updateReservation, deleteReservation } from '../controllers/reservationController.js';
 import { listPayments, getPayment, createPayment, updatePayment, deletePayment } from '../controllers/paymentController.js';
@@ -56,6 +66,13 @@ router.get('/rooms/:id', getRoomNew);
 router.post('/rooms', createRoomNew);
 router.put('/rooms/:id', updateRoomNew);
 router.delete('/rooms/:id', deleteRoomNew);
+router.put('/rooms/:id/start', startCleaning);
+
+router.put('/rooms/:id/clean', markRoomClean);
+
+router.put('/rooms/:id/dirty', markRoomDirty);
+
+router.put('/rooms/:id/inspect', markRoomInspected);
 
 // ─── Guests ────────────────────────────────────────────────
 router.get('/guests', listGuests);
