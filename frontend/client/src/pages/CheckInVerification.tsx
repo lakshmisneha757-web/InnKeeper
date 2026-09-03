@@ -171,6 +171,9 @@ export default function CheckInVerification() {
   const isSelectedGuestCheckedIn = Boolean(
     selectedReservation && (selectedReservation.status || '').toLowerCase().includes('check')
   );
+  const isSelectedGuestCancelled = Boolean(
+    selectedReservation && (selectedReservation.status || '').toLowerCase() === 'cancelled'
+  );
 
   // Determine current step based on explicit user progression
   useEffect(() => {
@@ -307,6 +310,10 @@ export default function CheckInVerification() {
     }
     if (isSelectedGuestCheckedIn) {
       toast.info("This guest is already checked-in.");
+      return;
+    }
+    if (isSelectedGuestCancelled) {
+      toast.error("Selected reservation is cancelled or inactive for check-in.");
       return;
     }
     if (!dlImage && !selfieImage) {
@@ -618,8 +625,10 @@ export default function CheckInVerification() {
                 const roomNum = r.roomNumber || r.room?.room_number || r.room?.number || r.roomId || "—";
                 const isIdDone = r.verificationStatus === "VERIFIED" || Boolean(r.dlImageUrl);
                 const isCheckedIn = (r.status || '').toLowerCase().includes('check');
+                const isCancelled = (r.status || '').toLowerCase() === 'cancelled';
                 let tag = "Pending ID";
                 if (isCheckedIn) tag = t("reservations.checkedIn");
+                else if (isCancelled) tag = "రద్దు చేయబడింది [Cancelled]";
                 else if (isIdDone) tag = t("checkin.identityVerified");
                 return (
                   <option key={r.id} value={String(r.id)}>
@@ -632,7 +641,7 @@ export default function CheckInVerification() {
         </div>
 
         {selectedReservation ? (
-          isSelectedGuestCheckedIn && (
+          isSelectedGuestCheckedIn ? (
             <div className="pt-4">
               <div className="bg-card border border-border rounded-3xl p-8 shadow-xl text-center max-w-md mx-auto space-y-4 animate-in fade-in zoom-in duration-300">
                 <div className="w-16 h-16 rounded-full bg-blue-600 text-white flex items-center justify-center mx-auto shadow-lg shadow-blue-500/30">
@@ -658,7 +667,27 @@ export default function CheckInVerification() {
                 </div>
               </div>
             </div>
-          )
+          ) : isSelectedGuestCancelled ? (
+            <div className="pt-4">
+              <div className="bg-rose-500/10 border border-rose-500/30 rounded-3xl p-8 shadow-xl text-center max-w-md mx-auto space-y-3 animate-in fade-in zoom-in duration-300">
+                <div className="w-14 h-14 rounded-full bg-rose-500 text-white flex items-center justify-center mx-auto shadow-lg shadow-rose-500/30 font-bold text-lg">
+                  ✕
+                </div>
+
+                <div>
+                  <span className="text-[11px] font-extrabold tracking-widest uppercase text-rose-600 dark:text-rose-400 bg-rose-500/15 px-3.5 py-1 rounded-full">
+                    రద్దు చేయబడింది (Cancelled)
+                  </span>
+                  <h3 className="text-lg font-black text-foreground mt-2 leading-tight">
+                    ఈ రిజర్వేషన్ రద్దు చేయబడింది
+                  </h3>
+                  <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
+                    Reservation RES-{String(selectedReservation.id).padStart(4, '0')} ({selectedReservation.guest ? `${selectedReservation.guest.firstName} ${selectedReservation.guest.lastName}` : "Guest"}) రద్దు చేయబడింది. చెక్-ఇన్ తనిఖీ చేయడానికి వేరే యాక్టివ్ రిజర్వేషన్‌ను ఎంచుకోండి.
+                  </p>
+                </div>
+              </div>
+            </div>
+          ) : null
         ) : (
           <div className="p-4 rounded-xl bg-blue-500/10 border border-blue-500/20 text-blue-700 dark:text-blue-300 text-xs font-bold text-center">
             {t("checkin.selectCandidateAlert")}
@@ -668,8 +697,8 @@ export default function CheckInVerification() {
 
 
 
-      {/* Conditionally Render Workflow Steps ONLY when a Candidate is selected and NOT already checked in */}
-      {selectedResId && !isSelectedGuestCheckedIn && (
+      {/* Conditionally Render Workflow Steps ONLY when a Candidate is selected and NOT already checked in and NOT cancelled */}
+      {selectedResId && !isSelectedGuestCheckedIn && !isSelectedGuestCancelled && (
         <>
           {/* STEP 1: ID Verification */}
           {step === 1 && (
