@@ -186,7 +186,12 @@ export default function CheckInVerification() {
         setBookingData((prev) => ({ ...prev, cardHolder: fullName }));
       }
     }
-  }, [selectedResId, selectedReservation]);
+
+    // If ID verification is already verified, proceed to Step 2 (Payment Process)
+    if (selectedReservation?.verificationStatus === 'VERIFIED' && !isSelectedGuestCheckedIn) {
+      setStep(2);
+    }
+  }, [selectedResId, selectedReservation, isSelectedGuestCheckedIn]);
 
   // Handle Room Booking with Payment Gateway Details
   const handleCreateBookingWithPayment = async (e: React.FormEvent) => {
@@ -607,8 +612,14 @@ export default function CheckInVerification() {
             <select
               value={selectedResId}
               onChange={(e) => {
-                setSelectedResId(e.target.value);
-                setStep(1);
+                const targetId = e.target.value;
+                setSelectedResId(targetId);
+                const target = reservations.find((r) => String(r.id) === String(targetId));
+                if (target && target.verificationStatus === 'VERIFIED' && !(target.status || '').toLowerCase().includes('check')) {
+                  setStep(2);
+                } else {
+                  setStep(1);
+                }
                 setPaymentDone(false);
                 setDlImage("");
                 setSelfieImage("");
@@ -718,7 +729,14 @@ export default function CheckInVerification() {
                     <select
                       value={selectedResId}
                       onChange={(e) => {
-                        setSelectedResId(e.target.value);
+                        const targetId = e.target.value;
+                        setSelectedResId(targetId);
+                        const target = reservations.find((r) => String(r.id) === String(targetId));
+                        if (target && target.verificationStatus === 'VERIFIED' && !(target.status || '').toLowerCase().includes('check')) {
+                          setStep(2);
+                        } else {
+                          setStep(1);
+                        }
                         setVerificationResult(null);
                       }}
                       className="bg-card border border-border rounded-lg px-3 py-1.5 text-xs font-bold text-foreground focus:outline-none focus:ring-2 focus:ring-blue-500 w-full sm:w-72"
@@ -739,17 +757,38 @@ export default function CheckInVerification() {
                 </div>
 
                 {selectedReservation && selectedReservation.verificationStatus === 'VERIFIED' ? (
-                  <div className="p-3.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-700 dark:text-emerald-300 text-xs font-bold flex items-center justify-between">
-                    <span>✓ ID Verification completed and verified. Proceed to Step 2 (Payment).</span>
-                    <Button onClick={() => setStep(2)} size="sm" className="bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold px-3 py-1">
-                      {t("checkin.nextStep")} →
-                    </Button>
+                  <div className="bg-emerald-500/10 border-2 border-emerald-500/30 rounded-3xl p-8 text-center max-w-lg mx-auto space-y-4 my-4 shadow-lg animate-in fade-in zoom-in duration-300">
+                    <div className="w-14 h-14 rounded-full bg-emerald-500 text-white flex items-center justify-center mx-auto shadow-md">
+                      <CheckCircle2 className="w-8 h-8" />
+                    </div>
+                    <div>
+                      <span className="text-xs font-black uppercase tracking-wider text-emerald-600 dark:text-emerald-400 bg-emerald-500/20 px-3.5 py-1 rounded-full">
+                        ✓ మొదటి దశ పూర్తయింది (Step 1 Complete)
+                      </span>
+                      <h3 className="text-xl font-bold text-foreground mt-3">
+                        గుర్తింపు తనిఖీ విజయవంతంగా పూర్తయింది!
+                      </h3>
+                      <p className="text-xs text-muted-foreground mt-1 max-w-md mx-auto">
+                        ఈ గెస్ట్ కోసం డ్రైవర్ లైసెన్స్ & సెల్ఫీ తనిఖీ పూర్తయింది. దయచేసి తదుపరి చెల్లింపు ప్రక్రియ (Step 2: Payment) కి కొనసాగండి.
+                      </p>
+                    </div>
+                    <div className="pt-3">
+                      <Button
+                        onClick={() => setStep(2)}
+                        className="bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold px-6 py-3 shadow-md gap-2"
+                      >
+                        <span>కొనసాగించండి: చెల్లింపు ప్రక్రియ (Continue to Step 2: Payment)</span>
+                        <ChevronRight className="w-4 h-4" />
+                      </Button>
+                    </div>
                   </div>
-                ) : selectedReservation && selectedReservation.verificationStatus === 'REJECTED' ? (
-                  <div className="p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-700 dark:text-rose-300 text-xs font-bold flex items-center justify-between">
-                    <span>✕ Identity Verification Rejected! Faces did not match. Please upload matching photos.</span>
-                  </div>
-                ) : null}
+                ) : (
+                  <>
+                    {selectedReservation && selectedReservation.verificationStatus === 'REJECTED' && (
+                      <div className="p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-700 dark:text-rose-300 text-xs font-bold flex items-center justify-between">
+                        <span>✕ Identity Verification Rejected! Faces did not match. Please upload matching photos.</span>
+                      </div>
+                    )}
 
                 {/* DL and Selfie Verification Interfaces */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -906,6 +945,8 @@ export default function CheckInVerification() {
                     )}
                   </Button>
                 </div>
+                  </>
+                )}
               </div>
             </div>
           )}
