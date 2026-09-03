@@ -1,10 +1,8 @@
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../utils/db.js';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
 import { sendPasswordResetEmail } from '../utils/emailNotifier.js';
-
-const prisma = new PrismaClient();
 const JWT_SECRET = process.env.JWT_SECRET || 'innkeeper-super-secret-key-change-in-production';
 const JWT_EXPIRES_IN = '7d';
 

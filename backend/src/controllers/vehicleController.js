@@ -1,5 +1,4 @@
-import { PrismaClient } from '@prisma/client';
-const prisma = new PrismaClient();
+import { prisma } from '../utils/db.js';
 
 function paginate(data, page, limit) {
   const total = data.length;
@@ -63,7 +62,12 @@ export async function createVehicle(req, res) {
 
 export async function updateVehicle(req, res) {
   try {
-    const vehicle = await prisma.vehicle.update({ where: { id: Number(req.params.id) }, data: req.body });
+    const ALLOWED_VEHICLE_FIELDS = ['make', 'model', 'licensePlate', 'state', 'parkingSlot', 'guestId'];
+    const safeData = {};
+    for (const key of ALLOWED_VEHICLE_FIELDS) {
+      if (key in req.body) safeData[key] = req.body[key];
+    }
+    const vehicle = await prisma.vehicle.update({ where: { id: Number(req.params.id) }, data: safeData });
     res.json(vehicle);
   } catch (err) {
     res.status(500).json({ error: err.message });

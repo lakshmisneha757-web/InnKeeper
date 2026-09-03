@@ -1,9 +1,8 @@
-import { PrismaClient } from '@prisma/client';
 import { generateDigitalKeyPayload, LockService } from '../lock/lock.service.js';
 import { sendCheckInEmail } from '../utils/emailNotifier.js';
+import { prisma } from '../utils/db.js';
 import crypto from 'crypto';
 
-const prisma = new PrismaClient();
 const lockService = new LockService();
 
 // Step 0: Create New Room Booking with Selected Room and Payment Gateway Details

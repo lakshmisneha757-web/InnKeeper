@@ -1,7 +1,7 @@
 import { PrismaClient } from '@prisma/client';
 import { emitRealtimeUpdate } from './realtime.js';
 
-const prisma = new PrismaClient();
+export const prisma = new PrismaClient();
 
 export async function initializeDb() {
   try {
@@ -273,6 +273,17 @@ export async function updateRoom(roomId, payload) {
 }
 
 export async function deleteRoom(roomId) {
+  const activeBookings = await prisma.reservation.findMany({
+    where: {
+      roomId: Number(roomId),
+      status: { in: ['confirmed', 'checked_in'] }
+    }
+  });
+
+  if (activeBookings.length > 0) {
+    throw new Error(`Cannot delete room #${roomId}: ${activeBookings.length} active reservation(s) currently exist. Relocate or check out guests first.`);
+  }
+
   await prisma.channelInventory.deleteMany({ where: { room_id: Number(roomId) } });
   await prisma.pricingHistory.deleteMany({ where: { room_id: Number(roomId) } });
   await prisma.booking.deleteMany({ where: { room_id: Number(roomId) } });
