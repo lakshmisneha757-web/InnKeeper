@@ -1,6 +1,19 @@
 import { create } from 'zustand';
 import { Room, MaintenanceTicket, NotificationItem, Role, RoomStatus, Priority, IssueCategory, CleaningLog } from '@/types';
 import { realtimeHub } from '@/lib/socketSim';
+import {
+  fetchRooms,
+  fetchMaintenance,
+  fetchNotifications,
+  startRoomCleaning,
+  markRoomClean,
+  markRoomDirty,
+  markRoomInspected,
+  createMaintenanceIssue,
+  updateMaintenanceTicket,
+  markNotificationAsRead,
+  clearNotifications,
+} from '@/services/api';
 
 interface AppState {
   activeRole: Role;
@@ -88,8 +101,8 @@ export const useStore = create<AppState>((set, get) => ({
   fetchRoomsFromDb: async () => {
     try {
       set({ isLoading: true });
-      const res = await fetch('/api/rooms');
-      const json = await res.json();
+      const response = await fetchRooms();
+const json = response.data;
       if (json.success) {
         set({ rooms: json.data });
       }
@@ -103,8 +116,8 @@ export const useStore = create<AppState>((set, get) => ({
   // Fetch Tickets from Backend Prisma DB API
   fetchTicketsFromDb: async () => {
     try {
-      const res = await fetch('/api/maintenance');
-      const json = await res.json();
+      const response = await fetchMaintenance();
+const json = response.data;
       if (json.success) {
         set({ tickets: json.data });
       }
@@ -116,8 +129,8 @@ export const useStore = create<AppState>((set, get) => ({
   // Fetch Notifications from Backend Prisma DB API
   fetchNotificationsFromDb: async () => {
     try {
-      const res = await fetch('/api/notifications');
-      const json = await res.json();
+      const response = await fetchNotifications();
+const json = response.data;
       if (json.success) {
         set({
           notifications: json.data.map((n: any) => ({
@@ -143,8 +156,8 @@ export const useStore = create<AppState>((set, get) => ({
         ),
       }));
 
-      const res = await fetch(`/api/rooms/${roomId}/start`, { method: 'PUT' });
-      const json = await res.json();
+      const response = await startRoomCleaning(roomId);
+const json = response.data;
       if (json.success) {
         const updatedRoom = json.data;
         realtimeHub.emit('room_updated', {
@@ -178,13 +191,8 @@ export const useStore = create<AppState>((set, get) => ({
         ),
       }));
 
-      const res = await fetch(`/api/rooms/${roomId}/clean`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ notes }),
-      });
-
-      const json = await res.json();
+      const response = await markRoomClean(roomId, notes);
+const json = response.data;
       if (json.success) {
         realtimeHub.emit('room_updated', {
           roomId,
@@ -206,8 +214,8 @@ export const useStore = create<AppState>((set, get) => ({
         rooms: state.rooms.map((r) => (r.id === roomId ? { ...r, status: 'DIRTY' } : r)),
       }));
 
-      const res = await fetch(`/api/rooms/${roomId}/dirty`, { method: 'PUT' });
-      const json = await res.json();
+      const response = await markRoomDirty(roomId);
+const json = response.data;
       if (json.success) {
         realtimeHub.emit('room_updated', { roomId, status: 'DIRTY' });
       }
@@ -222,8 +230,8 @@ export const useStore = create<AppState>((set, get) => ({
         rooms: state.rooms.map((r) => (r.id === roomId ? { ...r, status: 'CLEAN' } : r)),
       }));
 
-      const res = await fetch(`/api/rooms/${roomId}/inspect`, { method: 'PUT' });
-      const json = await res.json();
+      const response = await markRoomInspected(roomId);
+const json = response.data;
       if (json.success) {
         realtimeHub.emit('room_updated', { roomId, status: 'CLEAN' });
       }
@@ -235,13 +243,16 @@ export const useStore = create<AppState>((set, get) => ({
   // Report Maintenance Issue (Database API Transaction)
   reportMaintenanceIssue: async ({ roomId, category, title, description, priority, images }) => {
     try {
-      const res = await fetch('/api/maintenance', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ roomId, category, title, description, priority, images }),
-      });
+      const response = await createMaintenanceIssue({
+  roomId,
+  category,
+  title,
+  description,
+  priority,
+  images,
+});
 
-      const json = await res.json();
+const json = response.data;
       if (json.success) {
         const newTicket = json.data;
         realtimeHub.emit('maintenance_created', newTicket);
@@ -256,14 +267,14 @@ export const useStore = create<AppState>((set, get) => ({
 
   acceptTicket: async (ticketId, techName = 'Alex Rivera') => {
     try {
-      const res = await fetch(`/api/maintenance/${ticketId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'ACCEPT', techName }),
-      });
-      if (res.ok) {
-        await get().fetchTicketsFromDb();
-      }
+      const response = await updateMaintenanceTicket(ticketId, {
+  action: 'ACCEPT',
+  techName,
+});
+
+if (response.data) {
+  await get().fetchTicketsFromDb();
+}
     } catch (err) {
       console.error('API Error in acceptTicket:', err);
     }
@@ -271,14 +282,13 @@ export const useStore = create<AppState>((set, get) => ({
 
   rejectTicket: async (ticketId) => {
     try {
-      const res = await fetch(`/api/maintenance/${ticketId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'REJECT' }),
-      });
-      if (res.ok) {
-        await get().fetchTicketsFromDb();
-      }
+      const response = await updateMaintenanceTicket(ticketId, {
+  action: 'REJECT',
+});
+
+if (response.data) {
+  await get().fetchTicketsFromDb();
+}
     } catch (err) {
       console.error('API Error in rejectTicket:', err);
     }
@@ -286,14 +296,14 @@ export const useStore = create<AppState>((set, get) => ({
 
   startRepair: async (ticketId, estimatedTime = '1 Hour') => {
     try {
-      const res = await fetch(`/api/maintenance/${ticketId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'START', estimatedTime }),
-      });
-      if (res.ok) {
-        await get().fetchTicketsFromDb();
-      }
+      const response = await updateMaintenanceTicket(ticketId, {
+  action: 'START',
+  estimatedTime,
+});
+
+if (response.data) {
+  await get().fetchTicketsFromDb();
+}
     } catch (err) {
       console.error('API Error in startRepair:', err);
     }
@@ -301,14 +311,13 @@ export const useStore = create<AppState>((set, get) => ({
 
   pauseRepair: async (ticketId) => {
     try {
-      const res = await fetch(`/api/maintenance/${ticketId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'PAUSE' }),
-      });
-      if (res.ok) {
-        await get().fetchTicketsFromDb();
-      }
+      const response = await updateMaintenanceTicket(ticketId, {
+  action: 'PAUSE',
+});
+
+if (response.data) {
+  await get().fetchTicketsFromDb();
+}
     } catch (err) {
       console.error('API Error in pauseRepair:', err);
     }
@@ -316,16 +325,18 @@ export const useStore = create<AppState>((set, get) => ({
 
   completeRepair: async (ticketId, notes, completionImages, finalRoomStatus = 'DIRTY') => {
     try {
-      const res = await fetch(`/api/maintenance/${ticketId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'COMPLETE', notes, completionImages, finalRoomStatus }),
-      });
-      if (res.ok) {
-        await get().fetchRoomsFromDb();
-        await get().fetchTicketsFromDb();
-        await get().fetchNotificationsFromDb();
-      }
+      const response = await updateMaintenanceTicket(ticketId, {
+  action: 'COMPLETE',
+  notes,
+  completionImages,
+  finalRoomStatus,
+});
+
+if (response.data) {
+  await get().fetchRoomsFromDb();
+  await get().fetchTicketsFromDb();
+  await get().fetchNotificationsFromDb();
+}
     } catch (err) {
       console.error('API Error in completeRepair:', err);
     }
@@ -333,11 +344,7 @@ export const useStore = create<AppState>((set, get) => ({
 
   markNotificationRead: async (id) => {
     try {
-      await fetch('/api/notifications', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id }),
-      });
+      await markNotificationAsRead(id);
       set((state) => ({
         notifications: state.notifications.map((n) => (n.id === id ? { ...n, isRead: true } : n)),
       }));
@@ -348,7 +355,7 @@ export const useStore = create<AppState>((set, get) => ({
 
   clearAllNotifications: async () => {
     try {
-      await fetch('/api/notifications', { method: 'DELETE' });
+      await clearNotifications();
       set({ notifications: [] });
     } catch (err) {
       console.error('API Error in clearAllNotifications:', err);
