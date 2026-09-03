@@ -187,11 +187,11 @@ export default function CheckInVerification() {
       }
     }
 
-    // If ID verification is already verified, proceed to Step 2 (Payment Process)
-    if (selectedReservation?.verificationStatus === 'VERIFIED' && !isSelectedGuestCheckedIn) {
+    // If currently on Step 1 and ID verification is already verified, proceed to Step 2 (Payment Process)
+    if (step === 1 && selectedReservation?.verificationStatus === 'VERIFIED' && !isSelectedGuestCheckedIn) {
       setStep(2);
     }
-  }, [selectedResId, selectedReservation, isSelectedGuestCheckedIn]);
+  }, [selectedResId, selectedReservation, isSelectedGuestCheckedIn, step]);
 
   // Handle Room Booking with Payment Gateway Details
   const handleCreateBookingWithPayment = async (e: React.FormEvent) => {
@@ -458,6 +458,7 @@ export default function CheckInVerification() {
       });
 
       setCompletingCheckIn(false);
+      setStep(3);
       setCheckInCompletedAnimation(true);
       setDigitalKeyGenerated(false);
       toast.success("Check-in completed successfully!");
@@ -468,6 +469,7 @@ export default function CheckInVerification() {
       fetchReservations();
     } catch (err) {
       setCompletingCheckIn(false);
+      setStep(3);
       setCheckInCompletedAnimation(true);
       setDigitalKeyGenerated(false);
       toast.success("Check-in completed successfully!");
@@ -652,7 +654,7 @@ export default function CheckInVerification() {
         </div>
 
         {selectedReservation ? (
-          isSelectedGuestCheckedIn ? (
+          isSelectedGuestCheckedIn && step !== 3 ? (
             <div className="pt-4">
               <div className="bg-card border border-border rounded-3xl p-8 shadow-xl text-center max-w-md mx-auto space-y-4 animate-in fade-in zoom-in duration-300">
                 <div className="w-16 h-16 rounded-full bg-blue-600 text-white flex items-center justify-center mx-auto shadow-lg shadow-blue-500/30">
@@ -708,8 +710,8 @@ export default function CheckInVerification() {
 
 
 
-      {/* Conditionally Render Workflow Steps ONLY when a Candidate is selected and NOT already checked in and NOT cancelled */}
-      {selectedResId && !isSelectedGuestCheckedIn && !isSelectedGuestCancelled && (
+      {/* Conditionally Render Workflow Steps ONLY when a Candidate is selected and (NOT already checked in OR in step 3 key generation) and NOT cancelled */}
+      {selectedResId && (!isSelectedGuestCheckedIn || step === 3) && !isSelectedGuestCancelled && (
         <>
           {/* STEP 1: ID Verification */}
           {step === 1 && (
