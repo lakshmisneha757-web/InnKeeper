@@ -46,7 +46,7 @@ function evaluateRule(rule, context) {
 async function recordOccupancySnapshot(reason = 'system') {
   const rooms = await prisma.room.findMany({ include: { room_type: true } });
   const totalRooms = rooms.length;
-  const occupiedRooms = rooms.filter((room) => room.status === 'Occupied').length;
+  const occupiedRooms = rooms.filter((room) => String(room.status).toLowerCase() === 'occupied').length;
   const occupancyPercentage = totalRooms > 0 ? Math.round((occupiedRooms / totalRooms) * 100) : 0;
 
   await prisma.occupancyHistory.create({
@@ -71,13 +71,13 @@ async function updateStatistics() {
   const bookings = await prisma.booking.findMany({ where: { booking_status: { not: 'Cancelled' } } });
   const occupancy = await prisma.occupancyHistory.findMany({ orderBy: { created_at: 'desc' }, take: 1 });
   const averageSyncTime = logs.length
-    ? Number((logs.reduce((sum, log) => sum + Number(log.response_time.replace(/s/g, '')), 0) / logs.length).toFixed(1))
+    ? Number((logs.reduce((sum, log) => sum + Number((log.response_time || '0s').replace(/s/g, '')), 0) / logs.length).toFixed(1))
     : 0;
 
   const payload = {
     date: getDateKey(),
     total_rooms: rooms.length,
-    occupied_rooms: rooms.filter((room) => room.status === 'Occupied').length,
+    occupied_rooms: rooms.filter((room) => String(room.status).toLowerCase() === 'occupied').length,
     available_rooms: rooms.filter((room) => room.availability).length,
     connected_channels: channels.filter((channel) => channel.connected).length,
     active_bookings: bookings.length,
@@ -122,8 +122,6 @@ async function syncAllChannels(reason = 'Manual Sync', roomId = null) {
       }
     });
   }
-
-  await new Promise((resolve) => setTimeout(resolve, 1000));
 }
 
 async function recalculatePricing({ reason = 'Pricing recalculation', triggeredBy = 'system', scope = 'direct' } = {}) {
@@ -195,7 +193,7 @@ export async function getDashboardData() {
   const occupancy = await prisma.occupancyHistory.findMany({ take: 8, orderBy: { date: 'asc' } });
 
   const totalRooms = rooms.length;
-  const occupiedRooms = rooms.filter((room) => room.status === 'Occupied').length;
+  const occupiedRooms = rooms.filter((room) => String(room.status).toLowerCase() === 'occupied').length;
   const availableRooms = rooms.filter((room) => room.availability).length;
   const connectedChannels = channels.filter((channel) => channel.connected).length;
   const occupancyPercent = Math.round((occupiedRooms / totalRooms) * 100);

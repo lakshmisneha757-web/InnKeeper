@@ -4,6 +4,7 @@ import {
   updateRoom as updateExistingRoom,
   deleteRoom as removeRoom,
   createBooking as addBooking,
+  getBookings as fetchBookings,
   updateBooking as updateExistingBooking,
   cancelBooking as cancelExistingBooking,
   deleteBooking as removeBooking,
@@ -81,7 +82,7 @@ export const updateAvailability = async (req, res) => {
 
 export const listBookings = async (req, res) => {
   try {
-    const bookings = await fetchBookingList();
+    const bookings = await fetchBookings();
     res.json(bookings);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -259,6 +260,4 @@ export const listOccupancyHistory = async (req, res) => {
   }
 };
 
-async function fetchBookingList() {
-  return import('../utils/db.js').then((m) => m.getBookings());
-}
+

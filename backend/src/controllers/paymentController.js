@@ -53,7 +53,7 @@ export async function listPayments(req, res) {
       : mapped;
     res.json(paginate(filtered, Number(page), Number(limit)));
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'An internal error occurred while processing your request.' });
   }
 }
 
@@ -66,7 +66,7 @@ export async function getPayment(req, res) {
     if (!payment) return res.status(404).json({ error: 'Payment not found' });
     res.json(payment);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'An internal error occurred while processing your request.' });
   }
 }
 
@@ -84,7 +84,7 @@ export async function createPayment(req, res) {
     });
     res.status(201).json(payment);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'An internal error occurred while processing your request.' });
   }
 }
 
@@ -103,7 +103,7 @@ export async function updatePayment(req, res) {
     });
     res.json(payment);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'An internal error occurred while processing your request.' });
   }
 }
 
@@ -112,6 +112,6 @@ export async function deletePayment(req, res) {
     await prisma.payment.delete({ where: { id: Number(req.params.id) } });
     res.json({ success: true });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'An internal error occurred while processing your request.' });
   }
 }
