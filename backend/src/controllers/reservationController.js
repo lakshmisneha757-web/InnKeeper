@@ -110,11 +110,21 @@ export async function createReservation(req, res) {
     }
 
     if (phone) {
-      const cleanPhone = String(phone).replace(/\D/g, '');
-      if (cleanPhone.length !== 10 || !/^[6-9]\d{9}$/.test(cleanPhone) || /^(\d)\1{9}$/.test(cleanPhone) || cleanPhone === '1234567890') {
-        return res.status(400).json({ error: 'Please provide a valid 10-digit mobile phone number.' });
-      }
-    }
+  const phoneNumber = String(phone).trim();
+  const cleanPhone = phoneNumber.replace(/\D/g, '');
+
+  const internationalPhoneRegex = /^\+?[1-9]\d{9,14}$/;
+
+  if (
+    !internationalPhoneRegex.test(phoneNumber) ||
+    /^(\d)\1+$/.test(cleanPhone) ||
+    cleanPhone === '1234567890'
+  ) {
+    return res.status(400).json({
+      error: 'Please provide a valid international phone number.'
+    });
+  }
+}
 
     let finalGuestId = guestId ? Number(guestId) : null;
 

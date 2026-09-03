@@ -51,11 +51,23 @@ function validateServerGuest(data) {
     }
   }
   if (data.phone) {
-    const cleanPhone = String(data.phone).replace(/\D/g, '');
-    if (cleanPhone.length !== 10 || !/^[6-9]\d{9}$/.test(cleanPhone) || /^(\d)\1{9}$/.test(cleanPhone) || cleanPhone === '1234567890') {
-      return 'Please provide a valid 10-digit mobile phone number.';
-    }
+  const phone = String(data.phone).trim();
+  const cleanPhone = phone.replace(/\D/g, '');
+
+  // International phone numbers:
+  // - Optional leading +
+  // - 10 to 15 digits total
+  // - Reject repeated digits and known invalid test number
+  const internationalPhoneRegex = /^\+?[1-9]\d{9,14}$/;
+
+  if (
+    !internationalPhoneRegex.test(phone) ||
+    /^(\d)\1+$/.test(cleanPhone) ||
+    cleanPhone === '1234567890'
+  ) {
+    return 'Please provide a valid international phone number.';
   }
+}
   return null;
 }
 
