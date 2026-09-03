@@ -162,23 +162,26 @@ export async function logout(req, res) {
 export async function forgotPassword(req, res) {
   try {
     const { email } = req.body;
-    if (!email) return res.status(400).json({ error: 'Email is required.' });
+    if (!email) return res.status(400).json({ error: 'Email address is required.' });
 
     const normalizedEmail = email.trim().toLowerCase();
     const user = await prisma.user.findUnique({ where: { email: normalizedEmail } });
     if (!user) {
-      // Security: don't reveal whether the email exists
-      return res.status(200).json({ message: 'If an account exists with that email, a password reset link has been sent.' });
+      return res.status(404).json({ error: 'No account found with this email address. Please register an account first.' });
     }
 
     const resetToken = crypto.randomBytes(32).toString('hex');
     resetTokens.set(resetToken, { userId: user.id, email: user.email, expiresAt: Date.now() + 3600_000 });
 
-    // Send real email via Nodemailer/SMTP
-    await sendPasswordResetEmail({ toEmail: user.email, resetToken });
+    // Send real email via Nodemailer/SMTP to recipient email address
+    const emailResult = await sendPasswordResetEmail({ toEmail: user.email, resetToken });
+
+    if (!emailResult.success) {
+      return res.status(500).json({ error: 'Failed to send password reset email. Please try again later.' });
+    }
 
     return res.status(200).json({
-      message: 'If an account exists with that email, a password reset link has been sent.',
+      message: `Password reset link sent to ${user.email}! Please check your inbox.`,
     });
   } catch (err) {
     console.error('Forgot password error:', err);
