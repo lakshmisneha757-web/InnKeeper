@@ -14,7 +14,6 @@ import {
   User,
   Building2,
   Smartphone,
-  CreditCard,
   BedDouble,
   ChevronRight
 } from "lucide-react";
@@ -29,6 +28,51 @@ const AVAILABLE_ROOMS = [
   { id: 201, type: "Penthouse Skyline Suite", price: 349, floor: 2, capacity: 3, amenities: ["Balcony View", "Jacuzzi", "High-speed Fiber", "Express Check-In"], image: "https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?w=600&auto=format&fit=crop" },
   { id: 202, type: "Standard Queen Room", price: 139, floor: 2, capacity: 2, amenities: ["Queen Bed", "Smart TV", "Air Conditioned"], image: "https://images.unsplash.com/photo-1618773928121-c32242e63f39?w=600&auto=format&fit=crop" }
 ];
+
+type RazorpayResponse = {
+  razorpay_order_id?: string;
+  razorpay_payment_id?: string;
+  razorpay_signature?: string;
+};
+
+type RazorpayOptions = {
+  key: string;
+  amount: number;
+  currency: string;
+  order_id: string;
+  name: string;
+  description: string;
+  prefill?: { name?: string; email?: string; contact?: string };
+  handler: (response: RazorpayResponse) => void | Promise<void>;
+  modal?: { ondismiss?: () => void };
+};
+
+declare global {
+  interface Window {
+    Razorpay?: new (options: RazorpayOptions) => {
+      open: () => void;
+      on: (event: string, handler: (response: any) => void) => void;
+    };
+  }
+}
+
+let razorpayScriptPromise: Promise<void> | null = null;
+
+function loadRazorpayScript() {
+  if (window.Razorpay) return Promise.resolve();
+  if (razorpayScriptPromise) return razorpayScriptPromise;
+
+  razorpayScriptPromise = new Promise((resolve, reject) => {
+    const script = document.createElement("script");
+    script.src = "https://checkout.razorpay.com/v1/checkout.js";
+    script.async = true;
+    script.onload = () => window.Razorpay ? resolve() : reject(new Error("Razorpay Checkout is unavailable"));
+    script.onerror = () => reject(new Error("Unable to load Razorpay Checkout"));
+    document.body.appendChild(script);
+  });
+
+  return razorpayScriptPromise;
+}
 
 import { useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
@@ -82,12 +126,7 @@ export default function CheckInVerification() {
     phone: "",
     checkIn: new Date().toISOString().split("T")[0],
     checkOut: new Date(Date.now() + 86400000 * 2).toISOString().split("T")[0],
-    paymentMethod: "Credit Card", // 'Credit Card' | 'Stripe' | 'PayPal' | 'UPI'
-    cardNumber: "",
-    cardHolder: "",
-    expiry: "",
-    cvv: "",
-    upiId: "",
+    paymentMethod: "Razorpay",
   });
   const [submittingBooking, setSubmittingBooking] = useState<boolean>(false);
 
@@ -135,6 +174,83 @@ export default function CheckInVerification() {
 
   const selectedReservation = reservations.find((r) => String(r.id) === String(selectedResId));
 
+  const openRazorpayCheckout = async (paymentData: any, guest: any, onVerified: () => Promise<void> | void) => {
+    const checkout = paymentData?.razorpay;
+    if (!checkout?.keyId || !checkout.orderId || !Number.isFinite(Number(checkout.amount)) || Number(checkout.amount) <= 0 || checkout.currency !== "INR") {
+      toast.error("The payment order response was invalid.");
+      return;
+    }
+
+    return new Promise<void>(async (resolve) => {
+      try {
+      await loadRazorpayScript();
+      if (!window.Razorpay) throw new Error("Razorpay Checkout is unavailable");
+
+      let finished = false;
+      let verificationStarted = false;
+      const finish = async (success: boolean, message?: string) => {
+        if (finished) return;
+        finished = true;
+        try {
+          if (success) await onVerified();
+          else toast.error(message || "Payment was not completed.");
+        } finally {
+          resolve();
+        }
+      };
+
+      const razorpay = new window.Razorpay({
+        key: checkout.keyId,
+        amount: Number(checkout.amount),
+        currency: checkout.currency,
+        order_id: checkout.orderId,
+        name: "InnKeeper",
+        description: "Reservation payment",
+        prefill: {
+          name: guest ? `${guest.firstName || ""} ${guest.lastName || ""}`.trim() : undefined,
+          email: guest?.email || undefined,
+          contact: guest?.phone || undefined,
+        },
+        handler: async (response) => {
+          verificationStarted = true;
+          if (!response.razorpay_order_id || !response.razorpay_payment_id || !response.razorpay_signature) {
+            await finish(false, "Razorpay returned an invalid payment response.");
+            return;
+          }
+
+          try {
+            const verifyResponse = await fetch("/api/checkin/payment/verify", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(response),
+            });
+            const verifyData = await verifyResponse.json().catch(() => null);
+            if (!verifyResponse.ok || !verifyData?.success || verifyData.status !== "Paid") {
+              await finish(false, verifyData?.error || "Payment verification failed.");
+              return;
+            }
+            await finish(true);
+          } catch {
+            await finish(false, "Network error while verifying payment.");
+          }
+        },
+        modal: { ondismiss: () => {
+          if (!verificationStarted) void finish(false, "Payment window closed. No payment was recorded.");
+        } },
+      });
+
+      razorpay.on("payment.failed", () => {
+        verificationStarted = true;
+        void finish(false, "Razorpay reported that the payment failed.");
+      });
+      razorpay.open();
+      } catch (error: any) {
+        toast.error(error?.message || "Unable to open Razorpay Checkout.");
+        resolve();
+      }
+    });
+  };
+
   // Handle Room Booking with Payment Gateway Details
   const handleCreateBookingWithPayment = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -142,11 +258,6 @@ export default function CheckInVerification() {
       toast.error("Please fill in Guest First & Last Name");
       return;
     }
-    if (bookingData.paymentMethod === "Credit Card" && (!bookingData.cardNumber || !bookingData.cardHolder)) {
-      toast.error("Please complete all Payment Card details");
-      return;
-    }
-
     setSubmittingBooking(true);
     try {
       const res = await fetch("/api/checkin/book-with-payment", {
@@ -155,25 +266,26 @@ export default function CheckInVerification() {
         body: JSON.stringify({
           ...bookingData,
           roomId: selectedRoom.id,
-          totalAmount: selectedRoom.price * 2, // 2 nights calculation
         }),
       });
 
       const data = await res.json();
-      setSubmittingBooking(false);
-
       if (res.ok && data.success) {
-        toast.success("Room Booked & Payment Processed Successfully!");
-        setIsBookingModalOpen(false);
-        await fetchReservations();
-        setSelectedResId(String(data.reservation.id));
-        setStep(2); // Automatically advance to Driving License & Selfie verification step!
+        await openRazorpayCheckout(data, data.reservation?.guest, async () => {
+          toast.success("Payment verified successfully. Room booking confirmed!");
+          setPaymentDone(true);
+          setIsBookingModalOpen(false);
+          await fetchReservations();
+          setSelectedResId(String(data.reservation.id));
+          setStep(1);
+        });
       } else {
         toast.error(data.error || "Booking & Payment failed.");
       }
     } catch (err) {
-      setSubmittingBooking(false);
       toast.error("Network error processing payment");
+    } finally {
+      setSubmittingBooking(false);
     }
   };
 
@@ -381,46 +493,11 @@ export default function CheckInVerification() {
     }
   };
 
-  // Expiry Date Validation Helper (Month & Year check against current date)
-  const isCardExpired = (expiryStr: string) => {
-    if (!expiryStr) return false;
-    const match = expiryStr.trim().match(/^(0[1-9]|1[0-2])\/([2-9][0-9])$/);
-    if (!match) return true;
-    const month = parseInt(match[1], 10);
-    const yearShort = parseInt(match[2], 10);
-
-    const now = new Date();
-    const currentMonth = now.getMonth() + 1; // 1-12
-    const currentYearShort = parseInt(String(now.getFullYear()).slice(-2), 10);
-
-    if (yearShort < currentYearShort) return true;
-    if (yearShort === currentYearShort && month < currentMonth) return true;
-    return false;
-  };
-
-  // Handle Step 2: Payment Process Completion
+  // Handle Step 2: Create and verify a Razorpay payment
   const handleCompletePaymentProcess = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedResId) {
       toast.error("Please select a reservation first");
-      return;
-    }
-
-    const rawCardNumber = (bookingData.cardNumber || "").replace(/\D/g, "");
-    if (!rawCardNumber || rawCardNumber.length !== 16) {
-      toast.error("Please enter a valid 16-digit card number.");
-      return;
-    }
-
-    const rawExpiry = (bookingData.expiry || "").trim();
-    if (!rawExpiry || isCardExpired(rawExpiry)) {
-      toast.error("Card has expired or contains an invalid expiry date. Please enter a valid future expiry date (MM/YY).");
-      return;
-    }
-
-    const rawCvv = (bookingData.cvv || "").replace(/\D/g, "");
-    if (!rawCvv || rawCvv.length < 3 || rawCvv.length > 4) {
-      toast.error("CVV must be 3 or 4 digits.");
       return;
     }
 
@@ -431,25 +508,26 @@ export default function CheckInVerification() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           reservationId: selectedResId,
-          amount: selectedReservation?.totalCharges || 299,
-          paymentMethod: bookingData.paymentMethod || "Credit Card",
-          cardHolder: bookingData.cardHolder || selectedReservation?.guest?.firstName || "Guest",
-          cardNumber: rawCardNumber,
         }),
       });
 
       const data = await res.json();
-      setSubmittingBooking(false);
-      setPaymentDone(true);
-      qc.invalidateQueries({ queryKey: ["payments"] });
-      qc.invalidateQueries({ queryKey: ["reservations"] });
-      toast.success("Payment Processed Successfully! Status set to Paid.");
-      setStep(3); // Advance to Step 3: Digital Key Pass
+      if (!res.ok || !data.success) {
+        toast.error(data.error || "Unable to create payment order.");
+        return;
+      }
+
+      await openRazorpayCheckout(data, selectedReservation?.guest, async () => {
+        setPaymentDone(true);
+        qc.invalidateQueries({ queryKey: ["payments"] });
+        qc.invalidateQueries({ queryKey: ["reservations"] });
+        toast.success("Payment verified successfully. You can now complete check-in.");
+        setStep(3);
+      });
     } catch (err) {
+      toast.error("Network error while creating payment order.");
+    } finally {
       setSubmittingBooking(false);
-      setPaymentDone(true);
-      toast.success("Payment Processed Successfully! Proceeding to Digital Key Pass.");
-      setStep(3); // Advance to Step 3: Digital Key Pass
     }
   };
 
@@ -585,7 +663,7 @@ export default function CheckInVerification() {
         >
           <div className="flex items-center gap-3">
             <div className={`p-2.5 rounded-lg ${step === 2 ? "bg-emerald-600 text-white" : "bg-muted"}`}>
-              <CreditCard className="w-5 h-5" />
+              <Lock className="w-5 h-5" />
             </div>
             <div>
               <p className="text-xs text-muted-foreground uppercase font-semibold">Step 2</p>
@@ -596,7 +674,7 @@ export default function CheckInVerification() {
 
         <div
           onClick={() => {
-            if (verificationResult?.verificationStatus === "VERIFIED" && (paymentDone || selectedReservation?.paidAmount)) {
+            if (verificationResult?.verificationStatus === "VERIFIED" && paymentDone) {
               setStep(3);
             } else if (verificationResult?.verificationStatus !== "VERIFIED") {
               toast.error("Identity Verification required! Please complete ID & Selfie verification successfully first.");
@@ -836,7 +914,7 @@ export default function CheckInVerification() {
           <div className="flex justify-between items-center pb-1">
             <div>
               <p className="text-xs font-medium text-muted-foreground">
-                We'll pre-authorize your card. You're only charged for what you use.
+                Complete your secure Razorpay payment to continue check-in.
               </p>
             </div>
             <Button variant="ghost" size="sm" onClick={() => setStep(1)} className="rounded-xl text-xs">
@@ -845,129 +923,32 @@ export default function CheckInVerification() {
           </div>
 
           <form onSubmit={handleCompletePaymentProcess} className="space-y-4">
-            {/* Total Authorization Summary Card */}
+            {/* Server-calculated payment summary */}
             {(() => {
-              const ciDate = new Date(selectedReservation.checkIn);
-              const coDate = new Date(selectedReservation.checkOut);
-              const diffMs = Math.abs(coDate.getTime() - ciDate.getTime());
-              const nights = Math.max(1, Math.ceil(diffMs / (1000 * 3600 * 24)) || 1);
-              const totalCost = Number(selectedReservation.totalCharges || selectedReservation.paidAmount || (selectedReservation.room?.current_price ? selectedReservation.room.current_price * nights : 150));
-              
-              // 12% GST Tax Breakdown (Base + Tax = Total)
-              const taxRate = 0.12;
-              const baseRoomCharge = totalCost / (1 + taxRate);
-              const taxAmount = totalCost - baseRoomCharge;
+              const totalCost = Number(selectedReservation.totalCharges);
+              const formattedTotal = Number.isFinite(totalCost) && totalCost > 0
+                ? `₹${totalCost.toFixed(2)}`
+                : "Unavailable";
 
               return (
                 <div className="rounded-2xl border border-border bg-accent/30 p-4 space-y-2.5">
                   <div className="flex justify-between items-center text-xs font-medium text-muted-foreground">
-                    <span>Room charge ({nights} night{nights > 1 ? 's' : ''} pre-tax)</span>
-                    <span className="font-semibold text-foreground">₹{baseRoomCharge.toFixed(2)}</span>
-                  </div>
-                  <div className="flex justify-between items-center text-xs font-medium text-muted-foreground">
-                    <span>Taxes & fees (12% GST)</span>
-                    <span className="font-semibold text-foreground">₹{taxAmount.toFixed(2)}</span>
+                    <span>Reservation total (server-calculated)</span>
+                    <span className="font-semibold text-foreground">{formattedTotal}</span>
                   </div>
                   <div className="border-b border-dashed border-border pt-1" />
                   <div className="flex justify-between items-center text-sm font-bold text-foreground pt-1">
-                    <span>Total authorization (Incl. Taxes)</span>
+                    <span>Total payment</span>
                     <span className="text-lg font-black text-emerald-600 dark:text-emerald-400">
-                      ₹{totalCost.toFixed(2)}
+                      {formattedTotal}
                     </span>
                   </div>
                 </div>
               );
             })()}
 
-            {/* Input Form Fields */}
-            <div className="space-y-3 pt-1">
-              {/* Cardholder Name */}
-              <div className="space-y-1">
-                <label className="text-xs font-bold text-foreground">Cardholder Name</label>
-                <Input
-                  value={bookingData.cardHolder || (selectedReservation.guest ? `${selectedReservation.guest.firstName} ${selectedReservation.guest.lastName}` : "")}
-                  onChange={(e) => setBookingData({ ...bookingData, cardHolder: e.target.value })}
-                  placeholder="Cardholder Full Name"
-                  className="h-11 rounded-xl bg-card border-border text-sm font-medium focus-visible:ring-emerald-500"
-                />
-              </div>
-
-              {/* Card Number */}
-              <div className="space-y-1">
-                <label className="text-xs font-bold text-foreground">Card Number</label>
-                <Input
-                  value={bookingData.cardNumber || ""}
-                  maxLength={19}
-                  onChange={(e) => {
-                    const digits = e.target.value.replace(/\D/g, "").slice(0, 16);
-                    const formatted = digits.match(/.{1,4}/g)?.join(" ") || digits;
-                    setBookingData({ ...bookingData, cardNumber: formatted });
-                  }}
-                  placeholder="1234 5678 9012 3456"
-                  className={`h-11 rounded-xl bg-card font-mono text-sm tracking-wide ${
-                    bookingData.cardNumber && bookingData.cardNumber.replace(/\s/g, "").length !== 16
-                      ? "border-destructive bg-destructive/10 text-destructive ring-2 ring-destructive/20"
-                      : "border-border focus-visible:ring-emerald-500"
-                  }`}
-                />
-                {bookingData.cardNumber && bookingData.cardNumber.replace(/\s/g, "").length !== 16 && (
-                  <p className="text-xs font-semibold text-destructive flex items-center gap-1 mt-1">
-                    <span>⚠</span> Enter a valid 16-digit card number.
-                  </p>
-                )}
-              </div>
-
-              {/* Expiry & CVV (2 Column Layout) */}
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <label className="text-xs font-bold text-foreground">Expiry (MM/YY)</label>
-                  <Input
-                    value={bookingData.expiry || ""}
-                    maxLength={5}
-                    onChange={(e) => {
-                      let val = e.target.value.replace(/\D/g, "").slice(0, 4);
-                      if (val.length >= 3) {
-                        val = `${val.slice(0, 2)}/${val.slice(2)}`;
-                      }
-                      setBookingData({ ...bookingData, expiry: val });
-                    }}
-                    placeholder="MM/YY"
-                    className={`h-11 rounded-xl bg-card text-sm font-medium ${
-                      bookingData.expiry && isCardExpired(bookingData.expiry)
-                        ? "border-destructive bg-destructive/10 text-destructive ring-2 ring-destructive/20"
-                        : "border-border focus-visible:ring-emerald-500"
-                    }`}
-                  />
-                  {bookingData.expiry && isCardExpired(bookingData.expiry) && (
-                    <p className="text-xs font-semibold text-destructive flex items-center gap-1 mt-1">
-                      <span>⚠</span> Card has expired. Enter valid future expiry date (MM/YY).
-                    </p>
-                  )}
-                </div>
-                <div className="space-y-1">
-                  <label className="text-xs font-bold text-foreground">CVV</label>
-                  <Input
-                    type="password"
-                    maxLength={4}
-                    value={bookingData.cvv || ""}
-                    onChange={(e) => {
-                      const val = e.target.value.replace(/\D/g, "").slice(0, 4);
-                      setBookingData({ ...bookingData, cvv: val });
-                    }}
-                    placeholder="3456"
-                    className={`h-11 rounded-xl bg-card font-mono text-sm tracking-wide ${
-                      bookingData.cvv && (bookingData.cvv.length < 3 || bookingData.cvv.length > 4)
-                        ? "border-destructive bg-destructive/10 text-destructive ring-2 ring-destructive/20"
-                        : "border-border focus-visible:ring-emerald-500"
-                    }`}
-                  />
-                  {bookingData.cvv && (bookingData.cvv.length < 3 || bookingData.cvv.length > 4) && (
-                    <p className="text-xs font-semibold text-destructive flex items-center gap-1 mt-1">
-                      <span>⚠</span> Must be 3 or 4 digits.
-                    </p>
-                  )}
-                </div>
-              </div>
+            <div className="rounded-xl border border-dashed border-border bg-accent/20 p-4 text-xs text-muted-foreground">
+              Razorpay Checkout securely collects payment details. No card information is stored by InnKeeper.
             </div>
 
             {/* Authorize Payment Action Button */}
@@ -981,9 +962,7 @@ export default function CheckInVerification() {
                   <RefreshCw className="w-4 h-4 animate-spin" /> Authorizing Payment...
                 </>
               ) : (
-                <>
-                  Authorize Payment <ChevronRight className="w-4 h-4" />
-                </>
+                <>Pay with Razorpay <ChevronRight className="w-4 h-4" /></>
               )}
             </Button>
           </form>

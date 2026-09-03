@@ -1,6 +1,7 @@
 import { PrismaClient } from '@prisma/client';
 import { generateDigitalKeyPayload, LockService } from '../lock/lock.service.js';
 import { sendCheckInEmail } from '../utils/emailNotifier.js';
+import { createPaymentOrderForReservation } from './razorpayController.js';
 
 const prisma = new PrismaClient();
 const lockService = new LockService();
@@ -16,13 +17,7 @@ export async function createBookingWithPayment(req, res) {
       roomId,
       checkIn,
       checkOut,
-      paymentMethod, // 'Credit Card' | 'Stripe' | 'PayPal' | 'UPI' | 'Cash'
-      cardNumber,
-      cardHolder,
-      expiry,
-      cvv,
-      upiId,
-      totalAmount
+      paymentMethod
     } = req.body;
 
     if (!firstName || !lastName || !roomId || !checkIn || !checkOut) {
@@ -74,7 +69,12 @@ export async function createBookingWithPayment(req, res) {
     if (isNaN(parsedCheckIn.getTime()) || isNaN(parsedCheckOut.getTime())) {
       return res.status(400).json({ error: 'Provided check-in or check-out date is invalid.' });
     }
-    const charges = Number(totalAmount) || 299;
+    const room = await prisma.room.findUnique({ where: { id: Number(roomId) } });
+    const nights = Math.max(1, Math.ceil((parsedCheckOut.getTime() - parsedCheckIn.getTime()) / (1000 * 3600 * 24)));
+    const charges = room?.current_price ? nights * Number(room.current_price) : NaN;
+    if (!Number.isFinite(charges) || charges <= 0) {
+      return res.status(400).json({ error: 'Unable to calculate a valid reservation amount.' });
+    }
 
     const reservation = await prisma.reservation.create({
       data: {
@@ -84,27 +84,18 @@ export async function createBookingWithPayment(req, res) {
         checkOut: parsedCheckOut,
         status: 'confirmed',
         totalCharges: charges,
-        paidAmount: charges,
+        paidAmount: 0,
         source: 'Direct Web Booking',
         verificationStatus: 'UNVERIFIED',
         digitalKeyStatus: 'INACTIVE',
-        notes: `Payment processed via ${paymentMethod || 'Credit Card'}`
+        notes: `Payment pending via ${paymentMethod || 'Razorpay'}`
       },
       include: {
         guest: true
       }
     });
 
-    // 3. Create Payment Transaction Record
-    const payment = await prisma.payment.create({
-      data: {
-        reservationId: reservation.id,
-        amount: charges,
-        method: paymentMethod || 'Credit Card',
-        paymentStatus: 'COMPLETED',
-        notes: `Gateway Ref: TXN-${Date.now().toString().slice(-8)} | Holder: ${cardHolder || firstName}`
-      }
-    });
+    const { order, payment } = await createPaymentOrderForReservation(reservation);
 
     // 4. Send Automated Check-In Link Email to Guest Email Address
     const guestRecipientEmail = email || guest?.email;
@@ -120,9 +111,15 @@ export async function createBookingWithPayment(req, res) {
 
     res.status(201).json({
       success: true,
-      message: 'Room booked successfully, payment processed, and Check-In link sent to guest email!',
+      message: 'Room reserved successfully. Complete the Razorpay payment to confirm check-in.',
       reservation,
-      payment
+      payment,
+      razorpay: {
+        keyId: process.env.RAZORPAY_KEY_ID,
+        orderId: order.id,
+        amount: order.amount,
+        currency: order.currency,
+      }
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -201,7 +198,7 @@ export async function verifyGuestId(req, res) {
         dlImageUrl: safeDlUrl,
         selfieImageUrl: safeSelfieUrl,
         verificationStatus: isVerified ? 'VERIFIED' : 'REJECTED',
-        ...(isVerified && { status: 'checked_in' }),
+        ...(isVerified && { status: 'confirmed' }),
       },
       include: { guest: true }
     });
@@ -214,23 +211,6 @@ export async function verifyGuestId(req, res) {
         });
       } catch (rErr) {
         console.log('Room status update note:', rErr.message);
-      }
-    }
-
-    if (isVerified) {
-      const existingPayment = await prisma.payment.findFirst({ where: { reservationId: Number(reservationId) } });
-      if (!existingPayment) {
-        const gName = reservation.guest ? `${reservation.guest.firstName} ${reservation.guest.lastName}`.trim() : 'Guest';
-        const amountPaid = reservation.paidAmount || reservation.totalCharges || 2500;
-        await prisma.payment.create({
-          data: {
-            reservationId: Number(reservationId),
-            amount: amountPaid,
-            method: 'Credit Card',
-            paymentStatus: 'Paid',
-            notes: `Payment collected at check-in | Guest: ${gName}`
-          }
-        });
       }
     }
 
@@ -256,16 +236,16 @@ export async function verifyGuestId(req, res) {
   }
 }
 
-// Step 2: Process Check-in Payment & Record Paid Status
+// Step 2: Create a Razorpay order for an existing reservation.
 export async function processCheckInPayment(req, res) {
   try {
-    const { reservationId, amount, paymentMethod, cardHolder } = req.body;
-    if (!reservationId) {
+    const reservationId = Number(req.body?.reservationId);
+    if (!Number.isInteger(reservationId) || reservationId <= 0) {
       return res.status(400).json({ error: 'Reservation ID is required' });
     }
 
     const reservation = await prisma.reservation.findUnique({
-      where: { id: Number(reservationId) },
+      where: { id: reservationId },
       include: { guest: true }
     });
 
@@ -277,62 +257,19 @@ export async function processCheckInPayment(req, res) {
       return res.status(400).json({ error: 'You have already checked-in' });
     }
 
-    const paymentAmount = Number(amount) || reservation.totalCharges || 299;
-    const guestName = cardHolder || (reservation.guest ? `${reservation.guest.firstName} ${reservation.guest.lastName}` : 'Guest');
-
-    // Create or update single Payment record with status 'Paid'
-    const existingPayment = await prisma.payment.findFirst({ where: { reservationId: Number(reservationId) } });
-    let payment;
-    if (existingPayment) {
-      payment = await prisma.payment.update({
-        where: { id: existingPayment.id },
-        data: {
-          amount: paymentAmount,
-          method: paymentMethod || existingPayment.method || 'Credit Card',
-          paymentStatus: 'Paid',
-          notes: `Payment completed via Check-In Step 2 | Holder: ${guestName}`,
-        }
-      });
-    } else {
-      payment = await prisma.payment.create({
-        data: {
-          reservationId: Number(reservationId),
-          amount: paymentAmount,
-          method: paymentMethod || 'Credit Card',
-          paymentStatus: 'Paid',
-          notes: `Payment completed via Check-In Step 2 | Holder: ${guestName}`,
-        }
-      });
-    }
-
-    // Update reservation paid amount and set status to checked_in
-    const updatedRes = await prisma.reservation.update({
-      where: { id: Number(reservationId) },
-      data: {
-        paidAmount: paymentAmount,
-        status: 'checked_in',
-        verificationStatus: 'VERIFIED',
-      },
-      include: { guest: true }
-    });
-
-    // Update room status to occupied if room is assigned
-    if (reservation.roomId) {
-      try {
-        await prisma.room.update({
-          where: { id: reservation.roomId },
-          data: { status: 'occupied', availability: false }
-        });
-      } catch (rErr) {
-        console.log('Room status update note:', rErr.message);
-      }
-    }
+    const { order, payment } = await createPaymentOrderForReservation(reservation);
 
     res.json({
       success: true,
-      message: 'Payment completed successfully & Guest Status updated to Checked-In!',
+      message: 'Razorpay order created. Complete and verify payment before check-in.',
+      razorpay: {
+        keyId: process.env.RAZORPAY_KEY_ID,
+        orderId: order.id,
+        amount: order.amount,
+        currency: order.currency,
+      },
       payment,
-      reservation: updatedRes
+      reservation
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -356,13 +293,28 @@ export async function completeGuestCheckIn(req, res) {
       return res.status(404).json({ error: 'Reservation not found' });
     }
 
+    const paidPayments = await prisma.payment.aggregate({
+      _sum: { amount: true },
+      where: {
+        reservationId: reservation.id,
+        paymentStatus: 'Paid',
+        gatewayStatus: 'captured',
+        razorpayPaymentId: { not: null },
+      },
+    });
+    const paidAmount = Number(paidPayments._sum.amount || 0);
+    const totalCharges = Number(reservation.totalCharges);
+    if (!Number.isFinite(totalCharges) || totalCharges <= 0 || paidAmount < totalCharges) {
+      return res.status(402).json({ error: 'Verified payment is required before completing check-in.' });
+    }
+
     // 1. Update reservation status to checked_in
     const updated = await prisma.reservation.update({
       where: { id: Number(reservationId) },
       data: {
         status: 'checked_in',
         verificationStatus: 'VERIFIED',
-        paidAmount: reservation.paidAmount > 0 ? reservation.paidAmount : (reservation.totalCharges || 2500),
+        paidAmount,
       },
       include: { guest: true }
     });
@@ -379,31 +331,7 @@ export async function completeGuestCheckIn(req, res) {
       }
     }
 
-    // 3. Create or update payment record
-    const existingPayment = await prisma.payment.findFirst({ where: { reservationId: Number(reservationId) } });
     const gName = reservation.guest ? `${reservation.guest.firstName} ${reservation.guest.lastName}`.trim() : 'Guest';
-    const amountPaid = updated.paidAmount || 2500;
-
-    if (!existingPayment) {
-      await prisma.payment.create({
-        data: {
-          reservationId: Number(reservationId),
-          amount: amountPaid,
-          method: 'Credit Card',
-          paymentStatus: 'Paid',
-          notes: `Check-in completed payment for ${gName} (Reservation #${reservation.id})`
-        }
-      });
-    } else {
-      await prisma.payment.update({
-        where: { id: existingPayment.id },
-        data: {
-          amount: amountPaid,
-          paymentStatus: 'Paid',
-        }
-      });
-    }
-
     res.json({
       success: true,
       message: `Check-in completed for ${gName}! Status set to Checked-In.`,
@@ -444,6 +372,21 @@ export async function generateDigitalLockKey(req, res) {
       return res.status(400).json({ error: 'ID Verification (Driving License & Selfie) must be completed before generating room lock key.' });
     }
 
+    const paidPayments = await prisma.payment.aggregate({
+      _sum: { amount: true },
+      where: {
+        reservationId: reservation.id,
+        paymentStatus: 'Paid',
+        gatewayStatus: 'captured',
+        razorpayPaymentId: { not: null },
+      },
+    });
+    const paidAmount = Number(paidPayments._sum.amount || 0);
+    const totalCharges = Number(reservation.totalCharges);
+    if (!Number.isFinite(totalCharges) || totalCharges <= 0 || paidAmount < totalCharges) {
+      return res.status(402).json({ error: 'Verified payment is required before generating a room lock key.' });
+    }
+
     const roomNumber = reservation.roomId ? `ROOM-${reservation.roomId}` : 'ROOM-101';
     const lockId = `LOCK-${roomNumber}-${Date.now().toString().slice(-4)}`;
     
@@ -478,22 +421,6 @@ export async function generateDigitalLockKey(req, res) {
       } catch (rErr) {
         console.log('Room status update note:', rErr.message);
       }
-    }
-
-    // Ensure payment record exists for checked-in guest
-    const existingPayment = await prisma.payment.findFirst({ where: { reservationId: Number(reservationId) } });
-    if (!existingPayment) {
-      const gName = reservation.guest ? `${reservation.guest.firstName} ${reservation.guest.lastName}`.trim() : 'Guest';
-      const amountPaid = reservation.paidAmount || reservation.totalCharges || 2500;
-      await prisma.payment.create({
-        data: {
-          reservationId: Number(reservationId),
-          amount: amountPaid,
-          method: 'Credit Card',
-          paymentStatus: 'Paid',
-          notes: `Check-in completed payment for ${gName} (Reservation #${reservation.id})`
-        }
-      });
     }
 
     res.json({
