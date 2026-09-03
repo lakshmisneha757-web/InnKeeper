@@ -232,14 +232,14 @@ export default function HousekeepingPage() {
   return (
     <div className="space-y-6">
       {/* Top Header */}
-      <div className="rounded-2xl bg-sky-600 text-white p-5 flex flex-wrap items-center justify-between gap-4 shadow-lg">
+      <div className="rounded-2xl bg-blue-600 text-white p-5 flex flex-wrap items-center justify-between gap-4 shadow-lg">
         <div className="flex items-center gap-3">
           <div className="h-10 w-10 rounded-xl bg-white/20 border border-white/30 flex items-center justify-center text-white">
             <Sparkles className="h-5 w-5" />
           </div>
           <div>
             <h1 className="text-xl font-bold">{t("housekeeping.title")}</h1>
-            <p className="text-xs text-sky-100">{t("housekeeping.subtitle")}</p>
+            <p className="text-xs text-blue-100">{t("housekeeping.subtitle")}</p>
           </div>
         </div>
 
@@ -320,7 +320,7 @@ export default function HousekeepingPage() {
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2">
                           <span className="text-lg font-black text-foreground">{t("roomDrawer.roomNumber", { number: roomNum })}</span>
-                          <span className="text-xs text-muted-foreground font-semibold">({t("dashboard." + roomType.toLowerCase(), roomType)})</span>
+                          <span className="text-xs text-muted-foreground font-semibold">({String(t("dashboard." + roomType.toLowerCase(), roomType))})</span>
                         </div>
                         <span className="text-xs text-muted-foreground font-mono">{t("dashboard.floor", { floor })}</span>
                       </div>
@@ -385,7 +385,7 @@ export default function HousekeepingPage() {
                         {status === "pending" && (
                           <Button
                             onClick={() => updateM.mutate({ id: task.id, data: { status: "in-progress", cleaningStartedAt: new Date().toISOString() } })}
-                            className="flex-1 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-xl shadow-md py-2.5"
+                            className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl shadow-md py-2.5"
                           >
                             ▶ {t("housekeeping.startCleaning")}
                           </Button>
@@ -399,7 +399,7 @@ export default function HousekeepingPage() {
                                 updateRoomM.mutate({ roomId: Number(task.roomId), status: "vacant" });
                               }
                             }}
-                            className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl shadow-md py-2.5"
+                            className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl shadow-md py-2.5"
                           >
                             ✓ {t("housekeeping.markCleanVacant")}
                           </Button>
@@ -474,7 +474,7 @@ export default function HousekeepingPage() {
                     <SelectTrigger><SelectValue placeholder={t("housekeeping.selectRoom")} /></SelectTrigger>
                     <SelectContent>
                       {allRooms.map((r: any) => (
-                        <SelectItem key={r.id} value={String(r.id)}>{t("roomDrawer.roomNumber", { number: r.number || r.room_number })} ({t("dashboard." + (r.type || "Standard").toLowerCase(), r.type || "Standard")})</SelectItem>
+                        <SelectItem key={r.id} value={String(r.id)}>{t("roomDrawer.roomNumber", { number: r.number || r.room_number })} ({String(t("dashboard." + (r.type || "Standard").toLowerCase(), r.type || "Standard"))})</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
@@ -506,7 +506,7 @@ export default function HousekeepingPage() {
                 <Button type="button" variant="outline" className="h-11 rounded-2xl border-slate-200 bg-white hover:bg-slate-50 text-slate-700 font-medium px-6" onClick={() => setDialogOpen(false)}>
                   {t("common.cancel")}
                 </Button>
-                <Button type="submit" className="h-11 rounded-2xl bg-teal-600 hover:bg-teal-700 text-white font-semibold px-6" disabled={createM.isPending}>
+                <Button type="submit" className="h-11 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white font-semibold px-6" disabled={createM.isPending}>
                   {createM.isPending ? t("common.submitting") : t("housekeeping.saveTask")}
                 </Button>
               </div>

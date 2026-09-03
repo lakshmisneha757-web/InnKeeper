@@ -45,7 +45,7 @@ export default function PricingPage() {
     <div className="rounded-[28px] border border-violet-100 bg-white p-5 shadow-sm">
       <div className="flex items-center justify-between">
         <h2 className="text-xl font-semibold">Pricing Engine</h2>
-        <button onClick={handleRecalculate} className="rounded-full bg-violet-600 px-4 py-2 text-sm font-semibold text-white">Recalculate</button>
+        <button onClick={handleRecalculate} className="rounded-full bg-blue-600 hover:bg-blue-700 px-4 py-2 text-sm font-semibold text-white transition-colors">Recalculate</button>
       </div>
       <div className="mt-4 grid gap-4">
         {history.map((entry) => (

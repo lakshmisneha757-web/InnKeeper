@@ -174,7 +174,7 @@ export default function DistributionPage() {
                   <p>Inventory count: {rooms.filter((room) => room.availability).length}</p>
                 </div>
                 <div className="mt-4 flex flex-wrap gap-2">
-                  <button onClick={() => handleSync(channel.id)} className="rounded-full bg-violet-600 px-3 py-2 text-sm font-medium text-white">Sync</button>
+                  <button onClick={() => handleSync(channel.id)} className="rounded-full bg-blue-600 hover:bg-blue-700 px-3 py-2 text-sm font-medium text-white transition-colors">Sync</button>
                   {channel.connected ? (
                     <button onClick={() => handleChannelAction(channel.id, 'disconnect')} className="rounded-full border border-violet-200 px-3 py-2 text-sm">Disconnect</button>
                   ) : (
@@ -233,7 +233,7 @@ export default function DistributionPage() {
                   <span>${room.currentPrice}</span>
                   <span>{room.connectedChannels} channels</span>
                 </div>
-                <button onClick={() => handleAvailabilityToggle(room)} className="mt-4 w-full rounded-full bg-violet-600 px-3 py-2 text-sm font-medium text-white">Toggle Availability</button>
+                <button onClick={() => handleAvailabilityToggle(room)} className="mt-4 w-full rounded-full bg-blue-600 hover:bg-blue-700 px-3 py-2 text-sm font-medium text-white transition-colors">Toggle Availability</button>
               </motion.div>
             ))}
           </div>

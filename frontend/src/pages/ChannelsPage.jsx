@@ -118,7 +118,7 @@ export default function ChannelsPage() {
                 ) : (
                   <button onClick={() => handleAction(channel.id, 'connect')} className="rounded-full border border-violet-200 px-3 py-2 text-sm text-slate-600">Connect</button>
                 )}
-                <button onClick={() => handleAction(channel.id, 'sync')} className="flex items-center gap-2 rounded-full bg-violet-600 px-3 py-2 text-sm font-medium text-white">
+                <button onClick={() => handleAction(channel.id, 'sync')} className="flex items-center gap-2 rounded-full bg-blue-600 hover:bg-blue-700 px-3 py-2 text-sm font-medium text-white transition-colors">
                   <FiZap size={14} /> Sync Now
                 </button>
                 {channel.connected ? null : <button onClick={() => handleAction(channel.id, 'reconnect')} className="rounded-full border border-violet-200 px-3 py-2 text-sm text-slate-600">Reconnect</button>}

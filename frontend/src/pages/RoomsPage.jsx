@@ -82,7 +82,7 @@ export default function RoomsPage() {
               <span>{room.availability ? 'Available' : 'Booked'}</span>
             </div>
             <div className="mt-4 text-sm text-slate-500">Connected channels: {room.connectedChannels ?? 0}</div>
-            <button onClick={() => handleToggle(room)} className="mt-4 w-full rounded-full bg-violet-600 px-3 py-2 text-sm font-semibold text-white">Toggle Availability</button>
+            <button onClick={() => handleToggle(room)} className="mt-4 w-full rounded-full bg-blue-600 hover:bg-blue-700 px-3 py-2 text-sm font-semibold text-white transition-colors">Toggle Availability</button>
           </motion.div>
         ))}
       </div>

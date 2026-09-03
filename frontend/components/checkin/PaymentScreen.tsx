@@ -68,6 +68,7 @@ function formatExpiry(v: string): string {
 // Component
 // ---------------------------------------------------------------------------
 export function PaymentScreen() {
+  const { t } = useTranslation();
   const router = useRouter();
   const { token, idVerified, setPaymentAuthorized } = useCheckIn();
 
@@ -98,7 +99,7 @@ export function PaymentScreen() {
     if (!touched[key]) return null;
     if (parsed.success) return null;
     const issue = parsed.error.issues.find((i) => i.path[0] === key);
-    return issue?.message ?? null;
+    return issue ? issue.message : null;
   };
 
   const touch = (key: string) =>
@@ -110,13 +111,20 @@ export function PaymentScreen() {
 
     setProcessing(true);
     setServerError(null);
-    try {
-      await authorizePayment(token, "demo-payment-method-token", "");
+
+    const res = await authorizePayment(token, {
+      cardholderName: form.name,
+      cardNumber: form.number,
+      expiry: form.expiry,
+      cvv: form.cvv,
+    });
+
+    if (res.success) {
       setProcessing(false);
       setSuccess(true);
       setPaymentAuthorized(true);
-      setTimeout(() => router.push(`/checkin/${token}/review`), 700);
-    } catch {
+      setTimeout(() => router.push(`/checkin/${token}/review`), 600);
+    } else {
       setProcessing(false);
       setServerError("Your card was declined. Please try a different card.");
     }
@@ -130,7 +138,7 @@ export function PaymentScreen() {
             <CheckCircle2 className="h-10 w-10 text-emerald-600" />
           </div>
           <div className="text-center">
-            <p className="text-[17px] font-semibold text-slate-900">Payment authorized</p>
+            <p className="text-[17px] font-semibold text-slate-900">{t("checkin.authorizePayment")}</p>
             <p className="text-[13px] text-slate-400 mt-1">{money(total)} held on your card</p>
           </div>
         </div>
@@ -142,31 +150,31 @@ export function PaymentScreen() {
     <ScreenShell
       stepIndex={2}
       onBack={() => router.push(`/checkin/${token}/verify`)}
-      title="Payment"
-      subtitle="Your card is authorized now and charged at checkout."
+      title={t("checkin.step2Title")}
+      subtitle={t("checkin.paymentPreAuthSub")}
       footer={
-        <Button onClick={submit} loading={processing} disabled={processing}>
-          <Lock className="h-4 w-4" /> Authorize {money(total)}
+        <Button onClick={submit} disabled={processing}>
+          <Lock className="h-4 w-4" /> {t("checkin.authorizePayment")} {money(total)}
         </Button>
       }
     >
       {/* ── Charge summary ── */}
       <div className="rounded-2xl bg-slate-50 p-4 mb-5 space-y-1.5">
         <div className="flex justify-between text-[13.5px] text-slate-500">
-          <span>Room charge</span>
+          <span>{t("checkin.roomCharges")}</span>
           <span>{money(RESERVATION.nights * RESERVATION.roomRate)}</span>
         </div>
         <div className="flex justify-between text-[13.5px] text-slate-500">
-          <span>Taxes</span>
+          <span>{t("checkin.taxesAndFees")}</span>
           <span>{money(RESERVATION.taxes)}</span>
         </div>
         <div className="flex justify-between text-[13.5px] text-slate-500">
-          <span>Incidental deposit hold</span>
+          <span>{t("checkin.estimatedHoldAmount")}</span>
           <span>{money(RESERVATION.incidentalHold)}</span>
         </div>
         <div className="h-px bg-slate-200 my-2" />
         <div className="flex justify-between text-[14.5px] font-semibold text-slate-900">
-          <span>Total authorization</span>
+          <span>{t("checkin.totalAuthorization")}</span>
           <span>{money(total)}</span>
         </div>
       </div>
@@ -182,11 +190,11 @@ export function PaymentScreen() {
       {/* ── Form ── */}
       <div className="space-y-3.5">
         {/* Cardholder name */}
-        <Field label="Cardholder name" error={fieldError("cardholderName")}>
+        <Field label={t("checkin.cardholderNameLabel")} error={fieldError("cardholderName")}>
           <Input
             id="cardholder-name"
-            placeholder="Miguel Santos"
-            hasError={!!fieldError("cardholderName")}
+            placeholder={t("checkin.nameOnCardPlaceholder")}
+            className={fieldError("cardholderName") ? "border-red-500" : ""}
             value={form.name}
             onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
             onBlur={() => touch("cardholderName")}
@@ -195,14 +203,13 @@ export function PaymentScreen() {
         </Field>
 
         {/* Card number */}
-        <Field label="Card number" error={fieldError("cardNumber")}>
+        <Field label={t("checkin.sixteenDigitCardNumber")} error={fieldError("cardNumber")}>
           <div className="relative">
             <Input
               id="card-number"
               placeholder="1234 5678 9012 3456"
               inputMode="numeric"
-              className="pr-24"
-              hasError={!!fieldError("cardNumber")}
+              className={`pr-24 ${fieldError("cardNumber") ? "border-red-500" : ""}`}
               value={form.number}
               onChange={(e) =>
                 setForm((f) => ({
@@ -216,7 +223,7 @@ export function PaymentScreen() {
             {/* Card network badge */}
             {network !== "unknown" && (
               <span
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-[11px] font-semibold px-2 py-0.5 rounded-full text-white"
+                className="absolute right-3 top-1/2 -translate-y-1/2 rounded-md px-2 py-0.5 text-[11px] font-semibold text-white transition-all"
                 style={{ backgroundColor: NETWORK_COLORS[network] }}
               >
                 {NETWORK_LABELS[network]}
@@ -225,14 +232,14 @@ export function PaymentScreen() {
           </div>
         </Field>
 
-        {/* Expiry + CVV */}
+        {/* Expiry & CVV grid */}
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Expiry" error={fieldError("expiry")}>
+          <Field label={t("checkin.expiry")} error={fieldError("expiry")}>
             <Input
               id="card-expiry"
               placeholder="MM/YY"
               inputMode="numeric"
-              hasError={!!fieldError("expiry")}
+              className={fieldError("expiry") ? "border-red-500" : ""}
               value={form.expiry}
               onChange={(e) =>
                 setForm((f) => ({ ...f, expiry: formatExpiry(e.target.value) }))
@@ -242,21 +249,18 @@ export function PaymentScreen() {
               maxLength={5}
             />
           </Field>
-          <Field
-            label={`CVV${network === "amex" ? " (4 digits)" : ""}`}
-            error={fieldError("cvv")}
-          >
+          <Field label={t("checkin.cvv")} error={fieldError("cvv")}>
             <Input
               id="card-cvv"
               placeholder={network === "amex" ? "1234" : "123"}
               inputMode="numeric"
               maxLength={network === "amex" ? 4 : 3}
-              hasError={!!fieldError("cvv")}
+              className={fieldError("cvv") ? "border-red-500" : ""}
               value={form.cvv}
               onChange={(e) =>
                 setForm((f) => ({
                   ...f,
-                  cvv: e.target.value.replace(/\D/g, "").slice(0, network === "amex" ? 4 : 3),
+                  cvv: e.target.value.replace(/\D/g, ""),
                 }))
               }
               onBlur={() => touch("cvv")}

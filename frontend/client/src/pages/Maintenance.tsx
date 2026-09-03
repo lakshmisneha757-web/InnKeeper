@@ -348,48 +348,12 @@ export default function MaintenancePage() {
                             }
                           }
                         }}
-                        className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl shadow-md py-2.5"
+                        className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl shadow-md py-2.5"
                       >
                         ✓ {t("maintenance.completeRepair")}
                       </Button>
                     )}
 
-                    <Button
-                      variant="outline"
-                      onClick={() => {
-                        const isCurrentlyPaused = ticket.status === "paused";
-                        const currentAcc = ticket.accumulatedSeconds || 0;
-                        const addedSecs = ticket.repairStartedAt
-                          ? Math.max(0, Math.floor((Date.now() - new Date(ticket.repairStartedAt).getTime()) / 1000))
-                          : 0;
-                        const totalAcc = isCurrentlyPaused ? currentAcc : currentAcc + addedSecs;
-
-                        if (isCurrentlyPaused) {
-                          updateM.mutate({
-                            id: ticket.id,
-                            data: {
-                              status: "in-progress",
-                              repairStartedAt: new Date().toISOString(),
-                              accumulatedSeconds: totalAcc,
-                            },
-                          });
-                          toast.info(t("maintenance.toastRepairResumed", { id: ticket.id }));
-                        } else {
-                          updateM.mutate({
-                            id: ticket.id,
-                            data: {
-                              status: "paused",
-                              accumulatedSeconds: totalAcc,
-                              repairStartedAt: new Date().toISOString(),
-                            },
-                          });
-                          toast.warning(t("maintenance.toastRepairPaused", { id: ticket.id }));
-                        }
-                      }}
-                      className="rounded-xl border-slate-300 dark:border-slate-700 px-4 font-semibold hover:bg-accent"
-                    >
-                      {ticket.status === "paused" ? `▶ ${t("maintenance.resume")}` : t("maintenance.pause")}
-                    </Button>
                   </div>
                 </div>
               </div>
