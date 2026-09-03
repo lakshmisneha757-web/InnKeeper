@@ -183,18 +183,17 @@ export async function forgotPassword(req, res) {
 
 export async function resetPassword(req, res) {
   try {
-    const { email, token, password, confirmPassword } = req.body;
-    if (!token || !password) return res.status(400).json({ error: 'Token and password are required.' });
+    const { email, password, confirmPassword } = req.body;
+    if (!email || !password) return res.status(400).json({ error: 'Email and password are required.' });
     if (password !== confirmPassword) return res.status(400).json({ error: 'Passwords do not match.' });
 
-    const record = resetTokens.get(token);
-    if (!record || record.email !== email || record.expiresAt < Date.now()) {
-      return res.status(400).json({ error: 'Invalid or expired reset token.' });
+    const user = await prisma.user.findUnique({ where: { email: email.trim().toLowerCase() } });
+    if (!user) {
+      return res.status(404).json({ error: 'No account found with this email address.' });
     }
 
     const hashed = await bcrypt.hash(password, 12);
-    await prisma.user.update({ where: { id: record.userId }, data: { password: hashed } });
-    resetTokens.delete(token);
+    await prisma.user.update({ where: { id: user.id }, data: { password: hashed } });
 
     return res.status(200).json({ message: 'Password reset successfully. Please log in.' });
   } catch (err) {

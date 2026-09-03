@@ -22,14 +22,11 @@ export default function ForgotPasswordPage() {
       return;
     }
     try {
-      const result = await forgotPassword(email);
-      setSent(true);
-      toast.success('Password reset instructions were sent.');
-      if (result?.resetToken) {
-        setLocation(`/reset-password?email=${encodeURIComponent(email)}&token=${encodeURIComponent(result.resetToken)}`);
-      }
+      await forgotPassword(email.trim());
+      toast.success('Redirecting to password reset page...');
+      setLocation(`/reset-password?email=${encodeURIComponent(email.trim())}`);
     } catch (err: any) {
-      toast.error(err?.response?.data?.error || 'Unable to send reset instructions.');
+      setLocation(`/reset-password?email=${encodeURIComponent(email.trim())}`);
     }
   };
 
