@@ -3,6 +3,7 @@ import {
   createRoom as addRoom,
   updateRoom as updateExistingRoom,
   deleteRoom as removeRoom,
+  getBookings as fetchBookingList,
   createBooking as addBooking,
   updateBooking as updateExistingBooking,
   cancelBooking as cancelExistingBooking,
@@ -216,7 +217,9 @@ export const togglePricingRule = async (req, res) => {
 
 export const recalculatePricing = async (req, res) => {
   try {
-    const result = await recalculatePricingEngine(req.body?.reason || 'Manual Recalculation');
+    const result = await recalculatePricingEngine(
+      req.body?.reason || 'Manual Recalculation'
+    );
     res.json(result);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -258,7 +261,3 @@ export const listOccupancyHistory = async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 };
-
-async function fetchBookingList() {
-  return import('../utils/db.js').then((m) => m.getBookings());
-}

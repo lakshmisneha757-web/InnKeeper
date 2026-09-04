@@ -1,5 +1,14 @@
 import { create } from 'zustand';
-import { Room, MaintenanceTicket, NotificationItem, Role, RoomStatus, Priority, IssueCategory, CleaningLog } from '@/types';
+import {
+  Room,
+  MaintenanceTicket,
+  NotificationItem,
+  Role,
+  RoomStatus,
+  Priority,
+  IssueCategory,
+  CleaningLog,
+} from '@/types';
 import { realtimeHub } from '@/lib/socketSim';
 
 interface AppState {
@@ -23,14 +32,16 @@ interface AppState {
 
   // Role & Filter Switchers
   setActiveRole: (role: Role) => void;
-  setActiveView: (view: 'housekeeping' | 'maintenance' | 'frontdesk') => void;
+  setActiveView: (
+    view: 'housekeeping' | 'maintenance' | 'frontdesk'
+  ) => void;
   setFloorFilter: (floor: string) => void;
   setBuildingFilter: (building: string) => void;
   setPriorityFilter: (priority: string) => void;
   setStatusFilter: (status: string) => void;
   setSearchQuery: (query: string) => void;
 
-  // Housekeeping Workflows (API Driven)
+  // Housekeeping Workflows
   startCleaning: (roomId: string) => Promise<void>;
   pauseCleaning: (roomId: string) => Promise<void>;
   resumeCleaning: (roomId: string) => Promise<void>;
@@ -38,7 +49,7 @@ interface AppState {
   markRoomDirty: (roomId: string) => Promise<void>;
   markRoomInspected: (roomId: string) => Promise<void>;
 
-  // Maintenance Workflows (API Driven)
+  // Maintenance Workflows
   reportMaintenanceIssue: (data: {
     roomId: string;
     category: IssueCategory;
@@ -47,16 +58,24 @@ interface AppState {
     priority: Priority;
     images: string[];
   }) => Promise<void>;
+
   acceptTicket: (ticketId: string, techName?: string) => Promise<void>;
   rejectTicket: (ticketId: string) => Promise<void>;
   startRepair: (ticketId: string, estimatedTime?: string) => Promise<void>;
   pauseRepair: (ticketId: string) => Promise<void>;
-  completeRepair: (ticketId: string, notes?: string, completionImages?: string[], finalRoomStatus?: RoomStatus) => Promise<void>;
+  completeRepair: (
+    ticketId: string,
+    notes?: string,
+    completionImages?: string[],
+    finalRoomStatus?: RoomStatus
+  ) => Promise<void>;
 
   // Notifications
-  markNotificationRead: (id: string) => void;
-  clearAllNotifications: () => void;
-  addNotification: (notif: Omit<NotificationItem, 'id' | 'timestamp' | 'isRead'>) => void;
+  markNotificationRead: (id: string) => Promise<void>;
+  clearAllNotifications: () => Promise<void>;
+  addNotification: (
+    notif: Omit<NotificationItem, 'id' | 'timestamp' | 'isRead'>
+  ) => void;
 
   initRealtimeSync: () => () => void;
 }
@@ -75,23 +94,49 @@ export const useStore = create<AppState>((set, get) => ({
   searchQuery: '',
   isLoading: false,
 
+  // Role & Filter Switchers
   setActiveRole: (role) => set({ activeRole: role }),
+
   setActiveView: (view) => set({ activeView: view }),
 
-  setFloorFilter: (floor) => set({ selectedFloorFilter: floor }),
-  setBuildingFilter: (building) => set({ selectedBuildingFilter: building }),
-  setPriorityFilter: (priority) => set({ selectedPriorityFilter: priority }),
-  setStatusFilter: (status) => set({ selectedStatusFilter: status }),
-  setSearchQuery: (query) => set({ searchQuery: query }),
+  setFloorFilter: (floor) => set({
+    selectedFloorFilter: floor,
+  }),
 
-  // Fetch Rooms from Backend Prisma DB API
+  setBuildingFilter: (building) => set({
+    selectedBuildingFilter: building,
+  }),
+
+  setPriorityFilter: (priority) => set({
+    selectedPriorityFilter: priority,
+  }),
+
+  setStatusFilter: (status) => set({
+    selectedStatusFilter: status,
+  }),
+
+  setSearchQuery: (query) => set({
+    searchQuery: query,
+  }),
+
+  // Fetch Rooms from Backend
   fetchRoomsFromDb: async () => {
     try {
       set({ isLoading: true });
+
       const res = await fetch('/api/rooms');
       const json = await res.json();
+
+      if (!res.ok) {
+        throw new Error(
+          json?.error || `Failed to fetch rooms: ${res.status}`
+        );
+      }
+
       if (json.success) {
         set({ rooms: json.data });
+      } else if (Array.isArray(json)) {
+        set({ rooms: json });
       }
     } catch (err) {
       console.error('Failed to fetch rooms from API:', err);
@@ -100,167 +145,330 @@ export const useStore = create<AppState>((set, get) => ({
     }
   },
 
-  // Fetch Tickets from Backend Prisma DB API
+  // Fetch Tickets from Backend
   fetchTicketsFromDb: async () => {
     try {
       const res = await fetch('/api/maintenance');
       const json = await res.json();
+
+      if (!res.ok) {
+        throw new Error(
+          json?.error || `Failed to fetch tickets: ${res.status}`
+        );
+      }
+
       if (json.success) {
         set({ tickets: json.data });
+      } else if (Array.isArray(json)) {
+        set({ tickets: json });
       }
     } catch (err) {
       console.error('Failed to fetch tickets from API:', err);
     }
   },
 
-  // Fetch Notifications from Backend Prisma DB API
+  // Fetch Notifications from Backend
   fetchNotificationsFromDb: async () => {
     try {
       const res = await fetch('/api/notifications');
       const json = await res.json();
-      if (json.success) {
-        set({
-          notifications: json.data.map((n: any) => ({
-            ...n,
-            timestamp: new Date(n.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-          })),
-        });
+
+      if (!res.ok) {
+        throw new Error(
+          json?.error ||
+            `Failed to fetch notifications: ${res.status}`
+        );
       }
+
+      const notificationData = json.success
+        ? json.data
+        : Array.isArray(json)
+          ? json
+          : [];
+
+      set({
+        notifications: notificationData.map((n: any) => ({
+          ...n,
+          timestamp: new Date(
+            n.createdAt || n.timestamp || Date.now()
+          ).toLocaleTimeString([], {
+            hour: '2-digit',
+            minute: '2-digit',
+          }),
+        })),
+      });
     } catch (err) {
-      console.error('Failed to fetch notifications from API:', err);
+      console.error(
+        'Failed to fetch notifications from API:',
+        err
+      );
     }
   },
 
-  // Start Cleaning Action (Database API Call)
+  // Start Cleaning
   startCleaning: async (roomId) => {
     try {
-      // Optimistic update
       set((state) => ({
-        rooms: state.rooms.map((r) =>
-          r.id === roomId
-            ? { ...r, status: 'CLEANING_IN_PROGRESS', cleaningStartTime: new Date().toISOString() }
-            : r
+        rooms: state.rooms.map((room) =>
+          room.id === roomId
+            ? {
+                ...room,
+                status: 'CLEANING_IN_PROGRESS',
+                cleaningStartTime: new Date().toISOString(),
+              }
+            : room
         ),
       }));
 
-      const res = await fetch(`/api/rooms/${roomId}/start`, { method: 'PUT' });
+      const res = await fetch(`/api/rooms/${roomId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          status: 'CLEANING_IN_PROGRESS',
+        }),
+      });
+
       const json = await res.json();
-      if (json.success) {
+
+      if (res.ok && json.success) {
         const updatedRoom = json.data;
+
         realtimeHub.emit('room_updated', {
           roomId,
           status: 'CLEANING_IN_PROGRESS',
-          roomNumber: updatedRoom.roomNumber,
+          roomNumber: updatedRoom?.roomNumber,
         });
+
         await get().fetchNotificationsFromDb();
+      } else if (res.ok && json.id) {
+        realtimeHub.emit('room_updated', {
+          roomId,
+          status: 'CLEANING_IN_PROGRESS',
+          roomNumber: json.roomNumber,
+        });
+
+        await get().fetchNotificationsFromDb();
+      } else {
+        await get().fetchRoomsFromDb();
       }
     } catch (err) {
       console.error('API Error in startCleaning:', err);
-      get().fetchRoomsFromDb();
+      await get().fetchRoomsFromDb();
     }
   },
 
+  // Pause Cleaning
   pauseCleaning: async (roomId) => {
     await get().markRoomDirty(roomId);
   },
 
+  // Resume Cleaning
   resumeCleaning: async (roomId) => {
     await get().startCleaning(roomId);
   },
 
-  // Mark Room Clean Action (Database API Call)
+  // Mark Room Clean
   markRoomClean: async (roomId, notes) => {
     try {
-      // Optimistic update
       set((state) => ({
-        rooms: state.rooms.map((r) =>
-          r.id === roomId ? { ...r, status: 'CLEAN', cleaningNotes: notes } : r
+        rooms: state.rooms.map((room) =>
+          room.id === roomId
+            ? {
+                ...room,
+                status: 'CLEAN',
+                cleaningNotes: notes,
+              }
+            : room
         ),
       }));
 
-      const res = await fetch(`/api/rooms/${roomId}/clean`, {
+      const res = await fetch(`/api/rooms/${roomId}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ notes }),
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          status: 'CLEAN',
+        }),
       });
 
       const json = await res.json();
-      if (json.success) {
+
+      if (res.ok && json.success) {
         realtimeHub.emit('room_updated', {
           roomId,
           status: 'CLEAN',
-          roomNumber: json.data.roomNumber,
+          roomNumber: json.data?.roomNumber,
         });
+
         await get().fetchRoomsFromDb();
         await get().fetchNotificationsFromDb();
+      } else if (res.ok && json.id) {
+        realtimeHub.emit('room_updated', {
+          roomId,
+          status: 'CLEAN',
+          roomNumber: json.roomNumber,
+        });
+
+        await get().fetchRoomsFromDb();
+        await get().fetchNotificationsFromDb();
+      } else {
+        await get().fetchRoomsFromDb();
       }
     } catch (err) {
       console.error('API Error in markRoomClean:', err);
-      get().fetchRoomsFromDb();
+      await get().fetchRoomsFromDb();
     }
   },
 
+  // Mark Room Dirty
   markRoomDirty: async (roomId) => {
     try {
       set((state) => ({
-        rooms: state.rooms.map((r) => (r.id === roomId ? { ...r, status: 'DIRTY' } : r)),
+        rooms: state.rooms.map((room) =>
+          room.id === roomId
+            ? {
+                ...room,
+                status: 'DIRTY',
+              }
+            : room
+        ),
       }));
 
-      const res = await fetch(`/api/rooms/${roomId}/dirty`, { method: 'PUT' });
-      const json = await res.json();
-      if (json.success) {
-        realtimeHub.emit('room_updated', { roomId, status: 'DIRTY' });
-      }
-    } catch (err) {
-      get().fetchRoomsFromDb();
-    }
-  },
-
-  markRoomInspected: async (roomId) => {
-    try {
-      set((state) => ({
-        rooms: state.rooms.map((r) => (r.id === roomId ? { ...r, status: 'CLEAN' } : r)),
-      }));
-
-      const res = await fetch(`/api/rooms/${roomId}/inspect`, { method: 'PUT' });
-      const json = await res.json();
-      if (json.success) {
-        realtimeHub.emit('room_updated', { roomId, status: 'CLEAN' });
-      }
-    } catch (err) {
-      get().fetchRoomsFromDb();
-    }
-  },
-
-  // Report Maintenance Issue (Database API Transaction)
-  reportMaintenanceIssue: async ({ roomId, category, title, description, priority, images }) => {
-    try {
-      const res = await fetch('/api/maintenance', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ roomId, category, title, description, priority, images }),
+      const res = await fetch(`/api/rooms/${roomId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          status: 'DIRTY',
+        }),
       });
 
       const json = await res.json();
-      if (json.success) {
+
+      if (res.ok && (json.success || json.id)) {
+        realtimeHub.emit('room_updated', {
+          roomId,
+          status: 'DIRTY',
+          roomNumber: json.data?.roomNumber || json.roomNumber,
+        });
+      } else {
+        await get().fetchRoomsFromDb();
+      }
+    } catch (err) {
+      console.error('API Error in markRoomDirty:', err);
+      await get().fetchRoomsFromDb();
+    }
+  },
+
+  // Mark Room Inspected
+  markRoomInspected: async (roomId) => {
+    try {
+      set((state) => ({
+        rooms: state.rooms.map((room) =>
+          room.id === roomId
+            ? {
+                ...room,
+                status: 'CLEAN',
+              }
+            : room
+        ),
+      }));
+
+      const res = await fetch(`/api/rooms/${roomId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          status: 'CLEAN',
+        }),
+      });
+
+      const json = await res.json();
+
+      if (res.ok && (json.success || json.id)) {
+        realtimeHub.emit('room_updated', {
+          roomId,
+          status: 'CLEAN',
+          roomNumber: json.data?.roomNumber || json.roomNumber,
+        });
+      } else {
+        await get().fetchRoomsFromDb();
+      }
+    } catch (err) {
+      console.error('API Error in markRoomInspected:', err);
+      await get().fetchRoomsFromDb();
+    }
+  },
+
+  // Report Maintenance Issue
+  reportMaintenanceIssue: async ({
+    roomId,
+    category,
+    title,
+    description,
+    priority,
+    images,
+  }) => {
+    try {
+      const res = await fetch('/api/maintenance', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          roomId,
+          category,
+          title,
+          description,
+          priority,
+          images,
+        }),
+      });
+
+      const json = await res.json();
+
+      if (res.ok && json.success) {
         const newTicket = json.data;
+
         realtimeHub.emit('maintenance_created', newTicket);
+
         await get().fetchRoomsFromDb();
         await get().fetchTicketsFromDb();
         await get().fetchNotificationsFromDb();
       }
     } catch (err) {
-      console.error('API Error in reportMaintenanceIssue:', err);
+      console.error(
+        'API Error in reportMaintenanceIssue:',
+        err
+      );
     }
   },
 
-  acceptTicket: async (ticketId, techName = 'Alex Rivera') => {
+  // Accept Maintenance Ticket
+  acceptTicket: async (
+    ticketId,
+    techName = 'Alex Rivera'
+  ) => {
     try {
-      const res = await fetch(`/api/maintenance/${ticketId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'ACCEPT', techName }),
-      });
+      const res = await fetch(
+        `/api/maintenance/${ticketId}`,
+        {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            action: 'ACCEPT',
+            techName,
+          }),
+        }
+      );
+
       if (res.ok) {
         await get().fetchTicketsFromDb();
       }
@@ -269,13 +477,22 @@ export const useStore = create<AppState>((set, get) => ({
     }
   },
 
+  // Reject Maintenance Ticket
   rejectTicket: async (ticketId) => {
     try {
-      const res = await fetch(`/api/maintenance/${ticketId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'REJECT' }),
-      });
+      const res = await fetch(
+        `/api/maintenance/${ticketId}`,
+        {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            action: 'REJECT',
+          }),
+        }
+      );
+
       if (res.ok) {
         await get().fetchTicketsFromDb();
       }
@@ -284,13 +501,26 @@ export const useStore = create<AppState>((set, get) => ({
     }
   },
 
-  startRepair: async (ticketId, estimatedTime = '1 Hour') => {
+  // Start Repair
+  startRepair: async (
+    ticketId,
+    estimatedTime = '1 Hour'
+  ) => {
     try {
-      const res = await fetch(`/api/maintenance/${ticketId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'START', estimatedTime }),
-      });
+      const res = await fetch(
+        `/api/maintenance/${ticketId}`,
+        {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            action: 'START',
+            estimatedTime,
+          }),
+        }
+      );
+
       if (res.ok) {
         await get().fetchTicketsFromDb();
       }
@@ -299,13 +529,22 @@ export const useStore = create<AppState>((set, get) => ({
     }
   },
 
+  // Pause Repair
   pauseRepair: async (ticketId) => {
     try {
-      const res = await fetch(`/api/maintenance/${ticketId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'PAUSE' }),
-      });
+      const res = await fetch(
+        `/api/maintenance/${ticketId}`,
+        {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            action: 'PAUSE',
+          }),
+        }
+      );
+
       if (res.ok) {
         await get().fetchTicketsFromDb();
       }
@@ -314,13 +553,30 @@ export const useStore = create<AppState>((set, get) => ({
     }
   },
 
-  completeRepair: async (ticketId, notes, completionImages, finalRoomStatus = 'DIRTY') => {
+  // Complete Repair
+  completeRepair: async (
+    ticketId,
+    notes,
+    completionImages,
+    finalRoomStatus = 'DIRTY'
+  ) => {
     try {
-      const res = await fetch(`/api/maintenance/${ticketId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'COMPLETE', notes, completionImages, finalRoomStatus }),
-      });
+      const res = await fetch(
+        `/api/maintenance/${ticketId}`,
+        {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            action: 'COMPLETE',
+            notes,
+            completionImages,
+            finalRoomStatus,
+          }),
+        }
+      );
+
       if (res.ok) {
         await get().fetchRoomsFromDb();
         await get().fetchTicketsFromDb();
@@ -331,56 +587,113 @@ export const useStore = create<AppState>((set, get) => ({
     }
   },
 
+  // Mark Notification Read
   markNotificationRead: async (id) => {
     try {
-      await fetch('/api/notifications', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id }),
-      });
+      const res = await fetch(
+        '/api/notifications/mark-read',
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            id,
+            ids: [id],
+          }),
+        }
+      );
+
+      if (!res.ok) {
+        throw new Error(
+          `Failed to mark notification as read: ${res.status}`
+        );
+      }
+
       set((state) => ({
-        notifications: state.notifications.map((n) => (n.id === id ? { ...n, isRead: true } : n)),
+        notifications: state.notifications.map((notification) =>
+          notification.id === id
+            ? {
+                ...notification,
+                isRead: true,
+              }
+            : notification
+        ),
       }));
     } catch (err) {
-      console.error('API Error in markNotificationRead:', err);
+      console.error(
+        'API Error in markNotificationRead:',
+        err
+      );
     }
   },
 
+  // Clear All Notifications
   clearAllNotifications: async () => {
     try {
-      await fetch('/api/notifications', { method: 'DELETE' });
-      set({ notifications: [] });
+      const res = await fetch('/api/notifications', {
+        method: 'DELETE',
+      });
+
+      if (!res.ok) {
+        throw new Error(
+          `Failed to clear notifications: ${res.status}`
+        );
+      }
+
+      set({
+        notifications: [],
+      });
     } catch (err) {
-      console.error('API Error in clearAllNotifications:', err);
+      console.error(
+        'API Error in clearAllNotifications:',
+        err
+      );
     }
   },
 
+  // Add Notification
   addNotification: (notif) => {
     const newNotif: NotificationItem = {
       ...notif,
       id: `notif-${Date.now()}`,
-      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      timestamp: new Date().toLocaleTimeString([], {
+        hour: '2-digit',
+        minute: '2-digit',
+      }),
       isRead: false,
     };
-    set((state) => ({ notifications: [newNotif, ...state.notifications] }));
+
+    set((state) => ({
+      notifications: [
+        newNotif,
+        ...state.notifications,
+      ],
+    }));
   },
 
+  // Initialize Realtime Sync
   initRealtimeSync: () => {
-    // Initial DB Fetch
     get().fetchRoomsFromDb();
     get().fetchTicketsFromDb();
     get().fetchNotificationsFromDb();
 
-    const unsubRoom = realtimeHub.subscribe('room_updated', () => {
-      get().fetchRoomsFromDb();
-      get().fetchNotificationsFromDb();
-    });
+    const unsubRoom = realtimeHub.subscribe(
+      'room_updated',
+      () => {
+        get().fetchRoomsFromDb();
+        get().fetchNotificationsFromDb();
+      }
+    );
 
-    const unsubMaint = realtimeHub.subscribe('maintenance_created', () => {
-      get().fetchRoomsFromDb();
-      get().fetchTicketsFromDb();
-      get().fetchNotificationsFromDb();
-    });
+    const unsubMaint = realtimeHub.subscribe(
+      'maintenance_created',
+      () => {
+        get().fetchRoomsFromDb();
+        get().fetchTicketsFromDb();
+        get().fetchNotificationsFromDb();
+      }
+    );
 
     return () => {
       unsubRoom();

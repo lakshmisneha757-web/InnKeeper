@@ -32,11 +32,11 @@ export async function createNotification(req, res) {
 
 export async function markRead(req, res) {
   try {
-    const { ids } = req.body;
+    const rawIds = req.body?.ids || (req.body?.id !== undefined ? [req.body.id] : undefined);
     // If specific IDs provided, mark only those; otherwise mark all unread
-    if (ids && Array.isArray(ids) && ids.length > 0) {
+    if (rawIds && Array.isArray(rawIds) && rawIds.length > 0) {
       await prisma.appNotification.updateMany({
-        where: { id: { in: ids.map(Number) } },
+        where: { id: { in: rawIds.map(Number) } },
         data: { isRead: true }
       });
     } else {
@@ -50,3 +50,13 @@ export async function markRead(req, res) {
     res.status(500).json({ error: err.message });
   }
 }
+
+export async function clearNotifications(req, res) {
+  try {
+    await prisma.appNotification.deleteMany({});
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+}
+
