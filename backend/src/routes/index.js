@@ -17,7 +17,17 @@ import {
 } from '../controllers/distributionController.js';
 
 // New feature controllers
-import { listRoomsNew, getRoomNew, createRoomNew, updateRoomNew, deleteRoomNew } from '../controllers/roomsController.js';
+import {
+  listRoomsNew,
+  getRoomNew,
+  createRoomNew,
+  updateRoomNew,
+  deleteRoomNew,
+  startCleaning,
+  markRoomClean,
+  markRoomDirty,
+  markRoomInspected
+} from '../controllers/roomsController.js';
 import { listGuests, createGuest, updateGuest, deleteGuest } from '../controllers/guestController.js';
 import { listReservations, createReservation, updateReservation, deleteReservation } from '../controllers/reservationController.js';
 import { listPayments, getPayment, createPayment, updatePayment, deletePayment } from '../controllers/paymentController.js';
@@ -26,7 +36,12 @@ import { listCashLedger, createCashLedger, updateCashLedger, deleteCashLedger } 
 import { listShiftAudits, createShiftAudit, updateShiftAudit, deleteShiftAudit } from '../controllers/shiftAuditController.js';
 import { listHousekeeping, createHousekeeping, updateHousekeeping } from '../controllers/housekeepingController.js';
 import { listMaintenance, createMaintenance, updateMaintenance } from '../controllers/maintenanceController.js';
-import { listNotifications, createNotification, markRead } from '../controllers/notificationController.js';
+import {
+  listNotifications,
+  createNotification,
+  markRead,
+  clearNotifications
+} from '../controllers/notificationController.js';
 import { getAnalytics } from '../controllers/analyticsController.js';
 import { getDashboard } from '../controllers/dashboardController.js';
 import { getWeather } from '../controllers/weatherController.js';
@@ -62,6 +77,10 @@ router.post('/rooms', authenticateToken, requireRole('admin', 'manager'), create
 router.put('/rooms/:id', authenticateToken, requireRole('admin', 'manager'), updateRoomNew);
 router.delete('/rooms/:id', authenticateToken, requireRole('admin', 'manager'), deleteRoomNew);
 
+router.put('/rooms/:id/start', authenticateToken, startCleaning);
+router.put('/rooms/:id/clean', authenticateToken, markRoomClean);
+router.put('/rooms/:id/dirty', authenticateToken, markRoomDirty);
+router.put('/rooms/:id/inspect', authenticateToken, markRoomInspected);
 // ─── Guests ────────────────────────────────────────────────
 router.get('/guests', authenticateToken, listGuests);
 router.post('/guests', authenticateToken, createGuest);
@@ -114,6 +133,8 @@ router.put('/maintenance/:id', authenticateToken, updateMaintenance);
 router.get('/notifications', authenticateToken, listNotifications);
 router.post('/notifications', authenticateToken, createNotification);
 router.post('/notifications/mark-read', authenticateToken, markRead);
+router.put('/notifications', authenticateToken, markRead);
+router.delete('/notifications', authenticateToken, clearNotifications);
 
 // ─── Analytics / Dashboard ────────────────────────────────
 router.get('/analytics', authenticateToken, getAnalytics);
