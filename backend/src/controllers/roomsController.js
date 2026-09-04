@@ -10,15 +10,30 @@ function paginate(data, page, limit) {
 export async function listRoomsNew(req, res) {
   try {
     const { page = 1, limit = 200, q = '' } = req.query;
-    const rooms = await prisma.room.findMany({
-      include: { room_type: true, channelInventory: true },
-    });
+    const skip = (Number(page) - 1) * Number(limit);
+    const take = Number(limit);
 
-    rooms.sort((a, b) => (parseInt(a.room_number, 10) || 0) - (parseInt(b.room_number, 10) || 0));
-    const filtered = q
-      ? rooms.filter(r => r.room_number.includes(q) || r.room_type?.name?.toLowerCase().includes(q.toLowerCase()))
-      : rooms;
-    const normalized = filtered.map(r => ({
+    const whereClause = q ? {
+      OR: [
+        { room_number: { contains: q, mode: 'insensitive' } },
+        { room_type: { name: { contains: q, mode: 'insensitive' } } }
+      ]
+    } : {};
+
+    const [total, rooms] = await Promise.all([
+      prisma.room.count({ where: whereClause }),
+      prisma.room.findMany({
+        where: whereClause,
+        include: { room_type: true, channelInventory: true },
+        orderBy: { room_number: 'asc' },
+        skip,
+        take
+      })
+    ]);
+
+    const pages = Math.ceil(total / take);
+
+    const normalized = rooms.map(r => ({
       id: r.id,
       number: r.room_number,
       name: `Room ${r.room_number}`,
@@ -32,7 +47,8 @@ export async function listRoomsNew(req, res) {
       createdAt: r.last_updated,
       updatedAt: r.last_updated,
     }));
-    res.json(paginate(normalized, Number(page), Number(limit)));
+    
+    res.json({ items: normalized, total, page: Number(page), limit: take, pages });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: err.message });
