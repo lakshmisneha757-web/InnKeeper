@@ -5,15 +5,43 @@ import { authenticateToken } from '../middleware/authMiddleware.js';
 import { requireRole } from '../middleware/rbac.js';
 
 // Auth
-import { signup, login, me, logout, forgotPassword, resetPassword } from '../controllers/authController.js';
+import {
+  signup,
+  login,
+  me,
+  logout,
+  forgotPassword,
+  resetPassword
+} from '../controllers/authController.js';
 
 // Module2 distribution
 import {
-  healthCheck, listRooms, createRoom, updateRoom, deleteRoom, updateAvailability,
-  listBookings, createBooking, updateBooking, cancelBooking, deleteBooking,
-  listChannels, syncChannel, connectChannel, disconnectChannel, reconnectChannel,
-  listPricingRules, createPricingRule, updatePricingRule, deletePricingRule, togglePricingRule,
-  recalculatePricing, listPricingHistory, listSyncLogs, listStatistics, listOccupancyHistory
+  healthCheck,
+  listRooms,
+  createRoom,
+  updateRoom,
+  deleteRoom,
+  updateAvailability,
+  listBookings,
+  createBooking,
+  updateBooking,
+  cancelBooking,
+  deleteBooking,
+  listChannels,
+  syncChannel,
+  connectChannel,
+  disconnectChannel,
+  reconnectChannel,
+  listPricingRules,
+  createPricingRule,
+  updatePricingRule,
+  deletePricingRule,
+  togglePricingRule,
+  recalculatePricing,
+  listPricingHistory,
+  listSyncLogs,
+  listStatistics,
+  listOccupancyHistory
 } from '../controllers/distributionController.js';
 
 // New feature controllers
@@ -46,23 +74,20 @@ import { getAnalytics } from '../controllers/analyticsController.js';
 import { getDashboard } from '../controllers/dashboardController.js';
 import { getWeather } from '../controllers/weatherController.js';
 import { getRoomAvailability } from '../controllers/roomAvailabilityController.js';
-import { createBookingWithPayment, verifyGuestId, processCheckInPayment, generateDigitalLockKey, unlockDoor, completeGuestCheckIn } from '../controllers/checkinController.js';
+import {
+  createBookingWithPayment,
+  verifyGuestId,
+  processCheckInPayment,
+  generateDigitalLockKey,
+  unlockDoor,
+  completeGuestCheckIn
+} from '../controllers/checkinController.js';
 import { createPaymentOrder, verifyPayment } from '../controllers/razorpayController.js';
 
 const router = express.Router();
 
 // ─── Health & Public ───────────────────────────────────────
 router.get('/health', (req, res) => res.json({ status: 'ok' }));
-
-// ─── Check-In & Digital Lock Key Generation ────────────────
-router.post('/checkin/book-with-payment', createBookingWithPayment);
-router.post('/checkin/verify-id', verifyGuestId);
-router.post('/checkin/process-payment', processCheckInPayment);
-router.post('/checkin/payment/order', createPaymentOrder);
-router.post('/checkin/payment/verify', verifyPayment);
-router.post('/checkin/generate-lock-key', generateDigitalLockKey);
-router.post('/checkin/unlock-door', unlockDoor);
-router.post('/checkin/complete', completeGuestCheckIn);
 router.get('/weather', getWeather);
 
 // ─── Auth ──────────────────────────────────────────────────
@@ -77,6 +102,8 @@ router.post('/auth/reset-password', resetPassword);
 router.post('/checkin/book-with-payment', authenticateToken, createBookingWithPayment);
 router.post('/checkin/verify-id', authenticateToken, verifyGuestId);
 router.post('/checkin/process-payment', authenticateToken, processCheckInPayment);
+router.post('/checkin/payment/order', authenticateToken, createPaymentOrder);
+router.post('/checkin/payment/verify', authenticateToken, verifyPayment);
 router.post('/checkin/generate-lock-key', authenticateToken, generateDigitalLockKey);
 router.post('/checkin/unlock-door', authenticateToken, unlockDoor);
 router.post('/checkin/complete', authenticateToken, completeGuestCheckIn);
@@ -92,6 +119,7 @@ router.put('/rooms/:id/start', authenticateToken, startCleaning);
 router.put('/rooms/:id/clean', authenticateToken, markRoomClean);
 router.put('/rooms/:id/dirty', authenticateToken, markRoomDirty);
 router.put('/rooms/:id/inspect', authenticateToken, markRoomInspected);
+
 // ─── Guests ────────────────────────────────────────────────
 router.get('/guests', authenticateToken, listGuests);
 router.post('/guests', authenticateToken, createGuest);
