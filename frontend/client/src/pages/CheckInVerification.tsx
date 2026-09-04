@@ -226,11 +226,20 @@ export default function CheckInVerification() {
       }
     }
 
-    // If currently on Step 1 and ID verification is already verified, proceed to Step 2 (Payment Process)
-    if (step === 1 && selectedReservation?.verificationStatus === 'VERIFIED' && !isSelectedGuestCheckedIn) {
+    // Determine if payment is already completed for this reservation (via paidAmount or payments status)
+    const hasPaid =
+      (selectedReservation?.paidAmount != null && Number(selectedReservation.paidAmount) > 0) ||
+      (Array.isArray(selectedReservation?.payments) &&
+        selectedReservation.payments.some(
+          (p: any) => (p.paymentStatus || p.status || '').toLowerCase() === 'paid'
+        ));
+
+    if (isSelectedGuestCheckedIn || (selectedReservation?.verificationStatus === 'VERIFIED' && hasPaid)) {
+      setStep(3);
+    } else if (selectedReservation?.verificationStatus === 'VERIFIED') {
       setStep(2);
     }
-  }, [selectedResId, selectedReservation, isSelectedGuestCheckedIn, step]);
+  }, [selectedResId, selectedReservation, isSelectedGuestCheckedIn]);
 
   const openRazorpayCheckout = async (paymentData: any, guest: any, onVerified: () => Promise<void> | void) => {
     const checkout = paymentData?.razorpay;
@@ -710,7 +719,10 @@ export default function CheckInVerification() {
                 const targetId = e.target.value;
                 setSelectedResId(targetId);
                 const target = reservations.find((r) => String(r.id) === String(targetId));
-                if (target && target.verificationStatus === 'VERIFIED' && !(target.status || '').toLowerCase().includes('check')) {
+                const isTargetCheckedIn = Boolean(target && (target.status || '').toLowerCase().includes('check'));
+                if (isTargetCheckedIn) {
+                  setStep(3);
+                } else if (target && target.verificationStatus === 'VERIFIED') {
                   setStep(2);
                 } else {
                   setStep(1);
@@ -746,46 +758,32 @@ export default function CheckInVerification() {
           </div>
         </div>
 
-        <div
-          onClick={() => {
-            if (verificationResult?.verificationStatus === "VERIFIED") {
-              setStep(2);
-            } else {
-              toast.error("Identity Verification required! Please complete ID & Selfie verification successfully before proceeding to Payment.");
-            }
-          }}
-          className={`cursor-pointer p-4 rounded-xl border transition-all ${
-            step === 2 ? "bg-card border-emerald-500 ring-2 ring-emerald-500/20 shadow-md" : "bg-card/50 border-border opacity-70"
-          }`}
-        >
-          <div className="flex items-center gap-3">
-            <div className={`p-2.5 rounded-lg ${step === 2 ? "bg-emerald-600 text-white" : "bg-muted"}`}>
-              <Lock className="w-5 h-5" />
-            </div>
-            <div>
-              <p className="text-xs text-muted-foreground uppercase font-semibold">Step 2</p>
-              <p className="text-sm font-bold">{t("checkin.step2Title")}</p>
-            </div>
-          </div>
-        </div>
+        {selectedReservation ? (
+          isSelectedGuestCheckedIn ? (
+            <div className="pt-4">
+              <div className="bg-card border border-border rounded-3xl p-8 shadow-xl text-center max-w-md mx-auto space-y-4 animate-in fade-in zoom-in duration-300">
+                <div className="w-16 h-16 rounded-full bg-blue-600 text-white flex items-center justify-center mx-auto shadow-lg shadow-blue-500/30">
+                  <CheckCircle2 className="w-9 h-9" />
+                </div>
 
-        <div
-          onClick={() => {
-            if (verificationResult?.verificationStatus === "VERIFIED" && paymentDone) {
-              setStep(3);
-            } else if (verificationResult?.verificationStatus !== "VERIFIED") {
-              toast.error("Identity Verification required! Please complete ID & Selfie verification successfully first.");
-            } else {
-              toast.error("Payment required! Please complete Payment Process before accessing Digital Key Pass.");
-            }
-          }}
-          className={`cursor-pointer p-4 rounded-xl border transition-all ${
-            step === 3 ? "bg-card border-emerald-500 ring-2 ring-emerald-500/20 shadow-md" : "bg-card/50 border-border opacity-70"
-          }`}
-        >
-          <div className="flex items-center gap-3">
-            <div className={`p-2.5 rounded-lg ${step === 3 ? "bg-emerald-600 text-white" : "bg-muted"}`}>
-              <KeyRound className="w-5 h-5" />
+                <div>
+                  <span className="text-[11px] font-extrabold tracking-widest uppercase text-blue-600 dark:text-blue-400 bg-blue-500/10 px-3.5 py-1 rounded-full">
+                    {t("checkin.completedBadge")}
+                  </span>
+                  <h3 className="text-xl font-black text-foreground mt-3 leading-tight">
+                    {t("checkin.completedHeading")}
+                  </h3>
+                  <p className="text-xs text-muted-foreground mt-1.5">
+                    Reservation RES-{String(selectedReservation.id).padStart(4, '0')} for <span className="font-semibold text-foreground">{selectedReservation.guest ? `${selectedReservation.guest.firstName} ${selectedReservation.guest.lastName}` : "Guest"}</span> is active.
+                  </p>
+                </div>
+
+                <div className="pt-1">
+                  <span className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full bg-blue-500/10 text-blue-700 dark:text-blue-300 text-xs font-bold border border-blue-500/20">
+                    ✓ {t("dashboard.rooms")} #{selectedReservation.roomNumber || selectedReservation.room?.room_number || selectedReservation.room?.number || selectedReservation.roomId || "101"} {t("reservations.checkedIn")}
+                  </span>
+                </div>
+              </div>
             </div>
           ) : isSelectedGuestCancelled ? (
             <div className="pt-4">
@@ -817,8 +815,8 @@ export default function CheckInVerification() {
 
 
 
-      {/* Conditionally Render Workflow Steps ONLY when a Candidate is selected and (NOT already checked in OR in step 3 key generation) and NOT cancelled */}
-      {selectedResId && (!isSelectedGuestCheckedIn || step === 3) && !isSelectedGuestCancelled && (
+      {/* Conditionally Render Workflow Steps ONLY when a Candidate is selected and NOT already checked in and NOT cancelled */}
+      {selectedResId && !isSelectedGuestCheckedIn && !isSelectedGuestCancelled && (
         <>
           {/* STEP 1: ID Verification */}
           {step === 1 && (
@@ -1054,10 +1052,8 @@ export default function CheckInVerification() {
                     )}
                   </Button>
                 </div>
-                  </>
-                )}
-              </Button>
-            </div>
+              </>
+            )}
           </div>
         </div>
       )}
@@ -1123,107 +1119,6 @@ export default function CheckInVerification() {
         </div>
       )}
 
-                    <div className="space-y-1">
-                      <label className="text-xs font-bold text-foreground">{t("checkin.sixteenDigitCardNumber")}</label>
-                      <Input
-                        value={bookingData.cardNumber || ""}
-                        onChange={(e) => {
-                          const formatted = formatCardNumber(e.target.value);
-                          setBookingData({ ...bookingData, cardNumber: formatted });
-                        }}
-                        maxLength={19}
-                        placeholder="4532 0000 0000 0000"
-                        className={`h-11 rounded-xl bg-card font-mono text-sm tracking-wide ${bookingData.cardNumber && !validateCardNumber(bookingData.cardNumber)
-                            ? "border-destructive bg-destructive/10 text-destructive ring-2 ring-destructive/20"
-                            : "border-border focus-visible:ring-blue-500"
-                          }`}
-                      />
-                      {bookingData.cardNumber && !validateCardNumber(bookingData.cardNumber) && (
-                        <p className="text-xs font-semibold text-destructive flex items-center gap-1 mt-1">
-                          <span>⚠</span> Card number must be 16 digits.
-                        </p>
-                      )}
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-3">
-                      <div className="space-y-1">
-                        <label className="text-xs font-bold text-foreground">{t("checkin.expiry")}</label>
-                        <Input
-                          value={bookingData.expiry || ""}
-                          onChange={(e) => {
-                            const formatted = formatExpiry(e.target.value);
-                            setBookingData({ ...bookingData, expiry: formatted });
-                          }}
-                          maxLength={5}
-                          placeholder="12/28"
-                          className={`h-11 rounded-xl bg-card font-mono text-sm tracking-wide ${bookingData.expiry && isCardExpired(bookingData.expiry)
-                              ? "border-destructive bg-destructive/10 text-destructive ring-2 ring-destructive/20"
-                              : "border-border focus-visible:ring-blue-500"
-                            }`}
-                        />
-                        {bookingData.expiry && isCardExpired(bookingData.expiry) && (
-                          <p className="text-xs font-semibold text-destructive flex items-center gap-1 mt-1">
-                            <span>⚠</span> Card has expired. Enter valid future expiry date (MM/YY).
-                          </p>
-                        )}
-                      </div>
-                      <div className="space-y-1">
-                        <label className="text-xs font-bold text-foreground">{t("checkin.cvv")}</label>
-                        <Input
-                          type="password"
-                          maxLength={4}
-                          value={bookingData.cvv || ""}
-                          onChange={(e) => {
-                            const val = e.target.value.replace(/\D/g, "").slice(0, 4);
-                            setBookingData({ ...bookingData, cvv: val });
-                          }}
-                          placeholder="3456"
-                          className={`h-11 rounded-xl bg-card font-mono text-sm tracking-wide ${bookingData.cvv && (bookingData.cvv.length < 3 || bookingData.cvv.length > 4)
-                              ? "border-destructive bg-destructive/10 text-destructive ring-2 ring-destructive/20"
-                              : "border-border focus-visible:ring-blue-500"
-                            }`}
-                        />
-                        {bookingData.cvv && (bookingData.cvv.length < 3 || bookingData.cvv.length > 4) && (
-                          <p className="text-xs font-semibold text-destructive flex items-center gap-1 mt-1">
-                            <span>⚠</span> Must be 3 or 4 digits.
-                          </p>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="space-y-3">
-                    <div className="space-y-1">
-                      <label className="text-xs font-bold text-foreground">{t("checkin.upiIdLabel")}</label>
-                      <Input
-                        value={bookingData.upiId || ""}
-                        onChange={(e) => setBookingData({ ...bookingData, upiId: e.target.value })}
-                        placeholder="guest@upi"
-                        className="h-11 rounded-xl bg-card border-border focus-visible:ring-blue-500 text-sm"
-                      />
-                    </div>
-                  </div>
-                )}
-
-                {/* Authorize Payment Action Button */}
-                <Button
-                  type="submit"
-                  disabled={submittingBooking}
-                  className="w-full h-12 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl text-sm font-extrabold shadow-lg shadow-blue-500/25 flex items-center justify-center gap-2 mt-2 cursor-pointer"
-                >
-                  {submittingBooking ? (
-                    <>
-                      <RefreshCw className="w-4 h-4 animate-spin" /> {t("checkin.submittingPayment")}
-                    </>
-                  ) : (
-                    <>
-                      {t("checkin.authorizePayment")} <ChevronRight className="w-4 h-4" />
-                    </>
-                  )}
-                </Button>
-              </form>
-            </div>
-          )}
 
           {/* STEP 3: Complete Check-In & Digital Lock Passcard Flow */}
           {step === 3 && selectedReservation && (

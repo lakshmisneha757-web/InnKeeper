@@ -104,16 +104,12 @@ export async function loginUser(input: { email: string; password: string; rememb
     throw Object.assign(new Error("Invalid credentials"), { status: 401 });
   }
 
-<<<<<<< HEAD
-  const accessToken = jwt.sign({ sub: String(user.id), email: user.email, role: user.role }, config.jwtSecret, { expiresIn: input.rememberMe ? "30d" : "12h" });
-=======
   const authUser = toAuthUser(user);
   const accessToken = jwt.sign(
     { sub: authUser.id, email: authUser.email, role: authUser.role },
     config.jwtSecret,
     { expiresIn: input.rememberMe ? "30d" : "12h" }
   );
->>>>>>> janu-work
 
   return {
     user: buildPublicUser(authUser),
@@ -122,24 +118,12 @@ export async function loginUser(input: { email: string; password: string; rememb
 }
 
 export async function forgotPassword(input: { email: string }) {
-<<<<<<< HEAD
-  const user = await prisma.user.findUnique({ where: { email: input.email.trim().toLowerCase() } });
-=======
   const normalizedEmail = input.email.trim().toLowerCase();
   const user = await prisma.user.findUnique({ where: { email: normalizedEmail } });
->>>>>>> janu-work
   if (!user) {
     return { message: "If the email exists, reset instructions were sent." };
   }
 
-<<<<<<< HEAD
-  return { message: "If the email exists, reset instructions were sent." };
-}
-
-export async function resetPassword(input: { email: string; token: string; password: string }) {
-  const user = await prisma.user.findUnique({ where: { email: input.email.trim().toLowerCase() } });
-  if (!user) {
-=======
   const resetToken = crypto.randomBytes(24).toString("hex");
   const resetTokenHash = await bcrypt.hash(resetToken, 10);
   const expiresAt = new Date(Date.now() + 1000 * 60 * 30);
@@ -163,7 +147,6 @@ export async function resetPassword(input: { email: string; token: string; passw
 
   const valid = await bcrypt.compare(input.token, entry.tokenHash);
   if (!valid) {
->>>>>>> janu-work
     throw Object.assign(new Error("Invalid or expired reset token"), { status: 400 });
   }
 
@@ -174,13 +157,9 @@ export async function resetPassword(input: { email: string; token: string; passw
   const passwordHash = await bcrypt.hash(input.password, 10);
   await prisma.user.update({
     where: { id: user.id },
-<<<<<<< HEAD
-    data: { password: passwordHash },
-=======
     data: {
       password: passwordHash,
     },
->>>>>>> janu-work
   });
 
   resetTokens.delete(normalizedEmail);
@@ -189,15 +168,10 @@ export async function resetPassword(input: { email: string; token: string; passw
 }
 
 export async function getUserById(id: string) {
-<<<<<<< HEAD
-  const user = await prisma.user.findUnique({ where: { id: Number(id) } });
-  return user ? buildPublicUser(user as AuthUser) : null;
-=======
   const numericId = Number.parseInt(id, 10);
   if (Number.isNaN(numericId)) {
     return null;
   }
   const user = await prisma.user.findUnique({ where: { id: numericId } });
   return user ? buildPublicUser(toAuthUser(user)) : null;
->>>>>>> janu-work
 }

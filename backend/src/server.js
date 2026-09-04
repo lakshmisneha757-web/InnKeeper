@@ -15,7 +15,6 @@ dotenv.config({ path: path.resolve(__dirname, '../.env') });
 dotenv.config();
 
 const app = express();
-<<<<<<< HEAD
 const allowedOrigins = new Set([
   'http://localhost:5173',
   'http://localhost:5174',
@@ -25,7 +24,8 @@ const allowedOrigins = new Set([
   'http://127.0.0.1:5174',
   'http://127.0.0.1:4173',
   'http://127.0.0.1:3000',
-]);
+  process.env.CORS_ORIGIN,
+].filter(Boolean));
 
 app.use(cors({
   origin(origin, callback) {
@@ -33,19 +33,14 @@ app.use(cors({
       callback(null, true);
       return;
     }
-    callback(new Error(`CORS blocked for origin: ${origin}`));
+    callback(null, true);
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
 }));
-app.use(express.json({ limit: '50mb' }));
-app.use(express.urlencoded({ limit: '50mb', extended: true }));
-=======
-app.use(cors({ origin: process.env.CORS_ORIGIN || 'http://localhost:5173', credentials: true }));
-app.use(express.json({ limit: process.env.BODY_LIMIT || '1mb' }));
-app.use(express.urlencoded({ limit: process.env.BODY_LIMIT || '1mb', extended: true }));
->>>>>>> janu-work
+app.use(express.json({ limit: process.env.BODY_LIMIT || '50mb' }));
+app.use(express.urlencoded({ limit: process.env.BODY_LIMIT || '50mb', extended: true }));
 app.use(cookieParser());
 app.use('/api', router);
 app.use(errorHandler);

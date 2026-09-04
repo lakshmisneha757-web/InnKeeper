@@ -26,7 +26,7 @@ export async function listReservations(req, res) {
       prisma.reservation.count({ where: whereClause }),
       prisma.reservation.findMany({
         where: whereClause,
-        include: { guest: true, room: true },
+        include: { guest: true, room: true, payments: true },
         orderBy: { id: 'desc' },
         skip,
         take
@@ -293,7 +293,7 @@ export async function updateReservation(req, res) {
     const reservation = await prisma.reservation.update({
       where: { id: Number(req.params.id) },
       data: updateData,
-      include: { guest: true }
+      include: { guest: true, payments: true }
     });
 
     if (updateData.status === 'checked_out' && reservation.roomId) {
