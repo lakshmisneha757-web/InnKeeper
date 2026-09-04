@@ -28,11 +28,21 @@ export function validateEmail(email: string): boolean {
 }
 
 export function validatePhone(phone: string): boolean {
-  const clean = phone.replace(/\D/g, "");
-  if (!clean) return true;
-  if (clean.length !== 10) return false;
-  if (!/^[6-9]\d{9}$/.test(clean)) return false;
-  if (/^(\d)\1{9}$/.test(clean) || clean === "1234567890" || clean === "0123456789") return false;
+  const trimmed = phone.trim();
+  if (!trimmed) return true;
+
+  const clean = trimmed.replace(/\D/g, "");
+
+  // International phone number:
+  // 10 to 15 digits, optional leading +
+  const internationalPhoneRegex = /^\+?[1-9]\d{9,14}$/;
+
+  if (!internationalPhoneRegex.test(trimmed)) return false;
+
+  // Reject repeated digits and known invalid test numbers
+  if (/^(\d)\1+$/.test(clean)) return false;
+  if (clean === "1234567890" || clean === "0123456789") return false;
+
   return true;
 }
 
@@ -83,14 +93,10 @@ export function validateGuestInput(values: GuestInputValues): string | null {
   }
 
   // 4. Phone: Must start with 6, 7, 8, 9 and be 10 digits
-  const phone = values.phone ? values.phone.replace(/\D/g, "") : "";
-  if (phone) {
-    if (phone.length !== 10 || !/^[6-9]\d{9}$/.test(phone)) {
-      return "Validation Error: Invalid phone number";
-    }
-    if (/^(\d)\1{9}$/.test(phone) || phone === "1234567890" || phone === "0123456789") {
-      return "Validation Error: Invalid phone number";
-    }
+    // 4. Phone: International format (10 to 15 digits, optional +)
+  const phone = values.phone?.trim() || "";
+  if (phone && !validatePhone(phone)) {
+    return "Validation Error: Invalid phone number";
   }
 
   // 5. Vehicle License Plate (Indian Format: AP 39 AB 1234)
