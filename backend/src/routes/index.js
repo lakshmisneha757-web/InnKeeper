@@ -82,6 +82,7 @@ import {
   unlockDoor,
   completeGuestCheckIn
 } from '../controllers/checkinController.js';
+import { createPaymentOrder, verifyPayment } from '../controllers/razorpayController.js';
 
 const router = express.Router();
 
@@ -101,6 +102,8 @@ router.post('/auth/reset-password', resetPassword);
 router.post('/checkin/book-with-payment', authenticateToken, createBookingWithPayment);
 router.post('/checkin/verify-id', authenticateToken, verifyGuestId);
 router.post('/checkin/process-payment', authenticateToken, processCheckInPayment);
+router.post('/checkin/payment/order', authenticateToken, createPaymentOrder);
+router.post('/checkin/payment/verify', authenticateToken, verifyPayment);
 router.post('/checkin/generate-lock-key', authenticateToken, generateDigitalLockKey);
 router.post('/checkin/unlock-door', authenticateToken, unlockDoor);
 router.post('/checkin/complete', authenticateToken, completeGuestCheckIn);
