@@ -14,6 +14,7 @@ import { Sparkles, Plus, RefreshCw, Wrench } from "lucide-react";
 import confetti from "canvas-confetti";
 
 import { useTranslation } from "react-i18next";
+import { DataTablePagination } from "@/components/ui/DataTablePagination";
 
 function LiveStopwatch({ startTime }: { startTime?: string | number }) {
   const [seconds, setSeconds] = useState(0);
@@ -75,7 +76,7 @@ export default function HousekeepingPage() {
   const [filterFloor, setFilterFloor] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [page, setPage] = useState(1);
-  const itemsPerPage = 8;
+  const [itemsPerPage, setItemsPerPage] = useState(8);
   const [dialogOpen, setDialogOpen] = useState(false);
   const qc = useQueryClient();
 
@@ -306,7 +307,7 @@ export default function HousekeepingPage() {
           ) : (
             <>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-5">
-              {items.slice((page - 1) * itemsPerPage, page * itemsPerPage).map((task: any) => {
+              {(itemsPerPage === 0 ? items : items.slice((page - 1) * itemsPerPage, page * itemsPerPage)).map((task: any) => {
                 const roomObj = getRoomForTask(task.roomId, allRooms);
                 const roomNum = roomObj?.number || roomObj?.room_number || String(task.roomId || "1001");
                 const roomType = roomObj?.type || "King Suite";
@@ -434,14 +435,16 @@ export default function HousekeepingPage() {
               </div>
 
               {/* Pagination Controls */}
-              <div className="flex items-center justify-between mt-6 pt-4 border-t border-border text-xs text-muted-foreground">
-                <span>{t("housekeeping.showingTasks", { start: Math.min(items.length, (page - 1) * itemsPerPage + 1), end: Math.min(items.length, page * itemsPerPage), total: items.length })}</span>
-                <div className="flex items-center gap-2">
-                  <Button size="sm" variant="outline" onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}>{t("common.previous")}</Button>
-                  <span className="text-xs font-bold text-foreground">{t("housekeeping.pageIndicator", { page, pages: Math.ceil(items.length / itemsPerPage) || 1 })}</span>
-                  <Button size="sm" variant="outline" onClick={() => setPage(p => p + 1)} disabled={page >= Math.ceil(items.length / itemsPerPage)}>{t("common.next")}</Button>
-                </div>
-              </div>
+              <DataTablePagination
+                currentPage={page}
+                totalPages={itemsPerPage === 0 ? 1 : Math.ceil(items.length / itemsPerPage) || 1}
+                totalItems={items.length}
+                pageSize={itemsPerPage}
+                onPageChange={setPage}
+                onPageSizeChange={setItemsPerPage}
+                pageSizeOptions={[8, 16, 24, 0]}
+                itemName="tasks"
+              />
             </>
           )}
         </div>

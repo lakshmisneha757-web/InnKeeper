@@ -91,7 +91,10 @@ export async function createPaymentOrder(req, res) {
 
 export async function verifyPayment(req, res) {
   try {
-    const { razorpayOrderId, razorpayPaymentId, razorpaySignature } = req.body ?? {};
+    const razorpayOrderId = req.body?.razorpayOrderId || req.body?.razorpay_order_id;
+    const razorpayPaymentId = req.body?.razorpayPaymentId || req.body?.razorpay_payment_id;
+    const razorpaySignature = req.body?.razorpaySignature || req.body?.razorpay_signature;
+
     if (!razorpayOrderId || !razorpayPaymentId || !razorpaySignature) {
       return res.status(400).json({
         error: 'razorpayOrderId, razorpayPaymentId, and razorpaySignature are required',
@@ -138,8 +141,8 @@ export async function verifyPayment(req, res) {
     const amountMatches = Number(razorpayPayment.amount) === expectedAmountPaise &&
       Number(razorpayOrder.amount) === expectedAmountPaise;
     const currencyMatches = razorpayPayment.currency === 'INR' && razorpayOrder.currency === 'INR' && payment.currency === 'INR';
-    const isCaptured = razorpayPayment.status === 'captured';
-    const orderIsPaid = razorpayOrder.status === 'paid';
+    const isCaptured = razorpayPayment.status === 'captured' || razorpayPayment.status === 'authorized';
+    const orderIsPaid = razorpayOrder.status === 'paid' || razorpayOrder.amount_paid >= expectedAmountPaise;
 
     if (!paymentMatchesOrder || !paymentMatchesStoredOrder || !amountMatches || !currencyMatches || !isCaptured || !orderIsPaid) {
       await prisma.payment.update({

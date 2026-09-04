@@ -3,7 +3,24 @@ import { motion } from "framer-motion";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Bed, Users, Star, Sparkles, ArrowUpRight } from "lucide-react";
+import { DataTablePagination } from "@/components/ui/DataTablePagination";
+import {
+  Bed,
+  Users,
+  Star,
+  Sparkles,
+  ArrowUpRight,
+  LayoutGrid,
+  Grid3X3,
+  List,
+  Wrench,
+  Brush,
+  CheckCircle2,
+  CalendarCheck,
+  Eye,
+  ArrowUpDown,
+  Building2,
+} from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 interface Room {
@@ -24,31 +41,90 @@ interface RoomStatusBoardProps {
   onRoomClick: (data: { room: Room; guest?: any; reservation?: any }) => void;
 }
 
-const statusConfig: Record<string, { color: string; bg: string; border: string; key: string; dotColor: string }> = {
-  vacant: { color: "text-emerald-600 dark:text-emerald-400", bg: "bg-emerald-500/10", border: "border-emerald-500/30", key: "vacant", dotColor: "#10b981" },
-  occupied: { color: "text-blue-600 dark:text-blue-400", bg: "bg-blue-500/10", border: "border-blue-500/30", key: "occupied", dotColor: "#3b82f6" },
-  dirty: { color: "text-amber-600 dark:text-amber-400", bg: "bg-amber-500/10", border: "border-amber-500/30", key: "dirty", dotColor: "#f59e0b" },
-  maintenance: { color: "text-red-600 dark:text-red-400", bg: "bg-red-500/10", border: "border-red-500/30", key: "maintenance", dotColor: "#ef4444" },
-  reserved: { color: "text-purple-600 dark:text-purple-400", bg: "bg-purple-500/10", border: "border-purple-500/30", key: "reserved", dotColor: "#a855f7" },
+const statusConfig: Record<string, { color: string; bg: string; border: string; key: string; dotColor: string; label?: string }> = {
+  vacant: { color: "text-emerald-600 dark:text-emerald-400", bg: "bg-emerald-500/10", border: "border-emerald-500/30", key: "vacant", dotColor: "#10b981", label: "Vacant" },
+  occupied: { color: "text-blue-600 dark:text-blue-400", bg: "bg-blue-500/10", border: "border-blue-500/30", key: "occupied", dotColor: "#3b82f6", label: "Occupied" },
+  dirty: { color: "text-amber-600 dark:text-amber-400", bg: "bg-amber-500/10", border: "border-amber-500/30", key: "dirty", dotColor: "#f59e0b", label: "Dirty" },
+  maintenance: { color: "text-red-600 dark:text-red-400", bg: "bg-red-500/10", border: "border-red-500/30", key: "maintenance", dotColor: "#ef4444", label: "Out of Order / Maintenance" },
+  reserved: { color: "text-purple-600 dark:text-purple-400", bg: "bg-purple-500/10", border: "border-purple-500/30", key: "reserved", dotColor: "#a855f7", label: "Reserved" },
 };
 
-const typeIcons: Record<string, typeof Bed> = {
-  standard: Bed,
-  deluxe: Star,
-  suite: Star,
-  premium: Star,
-  family: Users,
+const getTypeIcon = (typeStr: string) => {
+  const t = (typeStr || "").toLowerCase();
+  if (t.includes("family") || t.includes("accessible")) return Users;
+  if (t.includes("suite") || t.includes("deluxe") || t.includes("premium")) return Star;
+  return Bed;
 };
 
 export default function RoomStatusBoard({ rooms, onRoomClick }: RoomStatusBoardProps) {
   const { t } = useTranslation();
+  const [viewMode, setViewMode] = useState<"comfortable" | "compact" | "list">("comfortable");
+  const [sortOption, setSortOption] = useState<string>("floor-asc");
+  const [selectedFloor, setSelectedFloor] = useState<number | "all">("all");
   const [page, setPage] = useState(1);
-  const roomsPerPage = 24;
-  const totalPages = Math.ceil(rooms.length / roomsPerPage) || 1;
+  const [pageSize, setPageSize] = useState<number>(20);
+
+  // Available floors extracted from the room inventory
+  const allFloors = useMemo(() => {
+    return Array.from(new Set(rooms.map((r) => Number(r.floor))))
+      .filter((f) => !isNaN(f))
+      .sort((a, b) => a - b);
+  }, [rooms]);
+
+  // Filter by floor if selected
+  const floorFilteredRooms = useMemo(() => {
+    if (selectedFloor === "all") return rooms;
+    return rooms.filter((r) => Number(r.floor) === selectedFloor);
+  }, [rooms, selectedFloor]);
+
+  // Natural numeric sorting for all rooms
+  const sortedRooms = useMemo(() => {
+    return [...floorFilteredRooms].sort((a, b) => {
+      const floorA = Number(a.floor) || 0;
+      const floorB = Number(b.floor) || 0;
+      const numCompare = String(a.number).localeCompare(String(b.number), undefined, { numeric: true });
+
+      switch (sortOption) {
+        case "floor-asc":
+          if (floorA !== floorB) return floorA - floorB;
+          return numCompare;
+        case "floor-desc":
+          if (floorA !== floorB) return floorB - floorA;
+          return -numCompare;
+        case "room-asc":
+          return numCompare;
+        case "room-desc":
+          return -numCompare;
+        case "rate-asc":
+          return (Number(a.rate) || 0) - (Number(b.rate) || 0);
+        case "rate-desc":
+          return (Number(b.rate) || 0) - (Number(a.rate) || 0);
+        case "status":
+          return String(a.status).localeCompare(String(b.status));
+        default:
+          if (floorA !== floorB) return floorA - floorB;
+          return numCompare;
+      }
+    });
+  }, [floorFilteredRooms, sortOption]);
+
+  const roomsPerPage = pageSize === 0 ? sortedRooms.length || 1 : pageSize;
+  const totalPages = Math.ceil(sortedRooms.length / roomsPerPage) || 1;
+
   const paginatedRooms = useMemo(() => {
+    if (pageSize === 0) return sortedRooms;
     const start = (page - 1) * roomsPerPage;
-    return rooms.slice(start, start + roomsPerPage);
-  }, [rooms, page]);
+    return sortedRooms.slice(start, start + roomsPerPage);
+  }, [sortedRooms, page, roomsPerPage, pageSize]);
+
+  // Determine floors order for current page
+  const floorNumbers = useMemo(() => {
+    const uniqueFloors = Array.from(new Set(paginatedRooms.map((r) => Number(r.floor))));
+    if (sortOption === "floor-desc") {
+      return uniqueFloors.sort((a, b) => b - a);
+    }
+    return uniqueFloors.sort((a, b) => a - b);
+  }, [paginatedRooms, sortOption]);
 
   const container = {
     hidden: { opacity: 0 },
@@ -59,133 +135,398 @@ export default function RoomStatusBoard({ rooms, onRoomClick }: RoomStatusBoardP
   };
 
   const item = {
-    hidden: { opacity: 0, scale: 0.95 },
+    hidden: { opacity: 0, scale: 0.96 },
     show: { opacity: 1, scale: 1 },
   };
 
+  const getStatusSubtext = (status: string) => {
+    const s = (status || "").toLowerCase();
+    switch (s) {
+      case "vacant":
+        return { label: t("dashboard.ready"), icon: ArrowUpRight };
+      case "occupied":
+        return { label: t("dashboard.occupied"), icon: CheckCircle2 };
+      case "dirty":
+        return { label: t("dashboard.dirty"), icon: Brush };
+      case "maintenance":
+        return { label: "Out of Order", icon: Wrench };
+      case "reserved":
+        return { label: t("dashboard.reserved"), icon: CalendarCheck };
+      default:
+        return { label: t("dashboard.ready"), icon: ArrowUpRight };
+    }
+  };
+
   return (
-    <Card className="overflow-hidden">
-      <CardHeader className="pb-3">
-        <div className="flex items-center justify-between">
-          <CardTitle className="text-lg font-semibold flex items-center gap-2">
-            <Bed className="h-5 w-5 text-sky-600" />
-            {t("dashboard.roomStatusBoard")}
-          </CardTitle>
-          <div className="flex items-center gap-2 rounded-full bg-sky-50 px-2.5 py-1 text-xs font-medium text-sky-700">
-            <Sparkles className="h-3.5 w-3.5" />
-            {t("dashboard.roomsCount", { count: rooms.length })}
+    <Card className="overflow-hidden border-border/70 shadow-xs">
+      <CardHeader className="pb-4 border-b border-border/40">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <CardTitle className="text-lg font-bold flex items-center gap-2 text-foreground">
+              <Bed className="h-5 w-5 text-sky-600 dark:text-sky-400" />
+              {t("dashboard.roomStatusBoard")}
+            </CardTitle>
+            <div className="flex items-center gap-1.5 rounded-full bg-sky-50 dark:bg-sky-950/60 px-2.5 py-0.5 text-xs font-semibold text-sky-700 dark:text-sky-300 border border-sky-200/60 dark:border-sky-800/60">
+              <Sparkles className="h-3 w-3" />
+              {t("dashboard.roomsCount", { count: sortedRooms.length })}
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2.5">
+            {/* Sort Order Selector */}
+            <div className="flex items-center gap-1.5 bg-muted/60 px-2.5 py-1 rounded-xl border border-border/60 text-xs">
+              <ArrowUpDown className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+              <span className="text-muted-foreground font-medium hidden sm:inline">Order:</span>
+              <select
+                value={sortOption}
+                onChange={(e) => {
+                  setSortOption(e.target.value);
+                  setPage(1);
+                }}
+                className="bg-transparent text-xs font-semibold text-foreground focus:outline-none cursor-pointer pr-1"
+                aria-label="Order rooms"
+              >
+                <option value="floor-asc" className="bg-card text-foreground">Floor & Room (1 → 150)</option>
+                <option value="floor-desc" className="bg-card text-foreground">Floor & Room (150 → 1)</option>
+                <option value="room-asc" className="bg-card text-foreground">Room # (Low to High)</option>
+                <option value="room-desc" className="bg-card text-foreground">Room # (High to Low)</option>
+                <option value="rate-asc" className="bg-card text-foreground">Rate (Low to High)</option>
+                <option value="rate-desc" className="bg-card text-foreground">Rate (High to Low)</option>
+                <option value="status" className="bg-card text-foreground">Status (Vacant, Occupied...)</option>
+              </select>
+            </div>
+
+            {/* View mode toggle */}
+            <div className="flex items-center gap-1 bg-muted/60 p-1 rounded-xl border border-border/60">
+              <button
+                onClick={() => setViewMode("comfortable")}
+                className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium transition-all cursor-pointer ${
+                  viewMode === "comfortable"
+                    ? "bg-card text-foreground shadow-xs font-semibold"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+                title="Comfortable Grid View"
+              >
+                <LayoutGrid className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">Comfortable</span>
+              </button>
+              <button
+                onClick={() => setViewMode("compact")}
+                className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium transition-all cursor-pointer ${
+                  viewMode === "compact"
+                    ? "bg-card text-foreground shadow-xs font-semibold"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+                title="Compact Grid View"
+              >
+                <Grid3X3 className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">Compact</span>
+              </button>
+              <button
+                onClick={() => setViewMode("list")}
+                className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium transition-all cursor-pointer ${
+                  viewMode === "list"
+                    ? "bg-card text-foreground shadow-xs font-semibold"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+                title="Table View"
+              >
+                <List className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">List</span>
+              </button>
+            </div>
           </div>
         </div>
-        <div className="mt-3 flex flex-wrap gap-3">
+
+        {/* Floor Quick-Navigation Pills */}
+        {allFloors.length > 1 && (
+          <div className="mt-3 flex items-center gap-1.5 overflow-x-auto pb-1 text-xs scrollbar-thin">
+            <span className="text-muted-foreground font-semibold shrink-0 flex items-center gap-1 pr-1 text-[11px]">
+              <Building2 className="h-3.5 w-3.5" /> Floor:
+            </span>
+            <button
+              onClick={() => {
+                setSelectedFloor("all");
+                setPage(1);
+              }}
+              className={`px-2.5 py-1 rounded-lg text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ${
+                selectedFloor === "all"
+                  ? "bg-primary text-primary-foreground shadow-2xs"
+                  : "bg-muted/60 text-muted-foreground hover:text-foreground hover:bg-muted"
+              }`}
+            >
+              All Floors ({rooms.length})
+            </button>
+            {allFloors.map((fl) => {
+              const count = rooms.filter((r) => Number(r.floor) === fl).length;
+              const isSelected = selectedFloor === fl;
+              return (
+                <button
+                  key={fl}
+                  onClick={() => {
+                    setSelectedFloor(fl);
+                    setPage(1);
+                  }}
+                  className={`px-2.5 py-1 rounded-lg text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ${
+                    isSelected
+                      ? "bg-primary text-primary-foreground shadow-2xs"
+                      : "bg-muted/60 text-muted-foreground hover:text-foreground hover:bg-muted"
+                  }`}
+                >
+                  F{fl} ({count})
+                </button>
+              );
+            })}
+          </div>
+        )}
+
+        {/* Legend */}
+        <div className="mt-2.5 flex flex-wrap items-center gap-x-4 gap-y-2 pt-2 border-t border-border/30">
           {Object.entries(statusConfig).map(([status, config]) => (
             <div key={status} className="flex items-center gap-1.5">
               <div
-                className="h-2.5 w-2.5 rounded-full"
+                className="h-2.5 w-2.5 rounded-full ring-2 ring-background"
                 style={{ backgroundColor: config.dotColor }}
               />
-              <span className="text-xs text-muted-foreground">{t(`dashboard.${config.key}`)}</span>
+              <span className="text-xs text-muted-foreground capitalize">
+                {config.label || t(`dashboard.${config.key}`)}
+              </span>
             </div>
           ))}
         </div>
       </CardHeader>
-      <CardContent>
-        {rooms.length === 0 ? (
-          <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50/70 py-12 text-center text-muted-foreground">
+
+      <CardContent className="pt-5">
+        {sortedRooms.length === 0 ? (
+          <div className="rounded-2xl border border-dashed border-border/80 bg-muted/30 py-12 text-center text-muted-foreground">
             <Bed className="mx-auto mb-4 h-12 w-12 opacity-30" />
-            <p className="font-medium text-slate-700">{t("dashboard.noRoomsFound")}</p>
+            <p className="font-semibold text-foreground">{t("dashboard.noRoomsFound")}</p>
             <p className="mt-1 text-sm">{t("dashboard.adjustFilters")}</p>
           </div>
         ) : (
-          <div className="space-y-6">
-            {Array.from(new Set(paginatedRooms.map((r) => r.floor)))
-              .sort((a, b) => a - b)
-              .map((floorNum) => {
-                const floorRooms = paginatedRooms.filter((r) => r.floor === floorNum);
-                const vacantCount = floorRooms.filter((r) => r.status === "vacant").length;
-                const occupiedCount = floorRooms.filter((r) => r.status === "occupied").length;
+          <div className="space-y-7">
+            {floorNumbers.map((floorNum) => {
+              const floorRooms = paginatedRooms
+                .filter((r) => Number(r.floor) === floorNum)
+                .sort((a, b) => {
+                  const numCompare = String(a.number).localeCompare(String(b.number), undefined, { numeric: true });
+                  if (sortOption === "floor-desc" || sortOption === "room-desc") return -numCompare;
+                  if (sortOption === "rate-asc") return (Number(a.rate) || 0) - (Number(b.rate) || 0);
+                  if (sortOption === "rate-desc") return (Number(b.rate) || 0) - (Number(a.rate) || 0);
+                  return numCompare;
+                });
 
-                return (
-                  <div key={floorNum} className="space-y-3">
-                    <div className="flex items-center justify-between border-b pb-2">
-                      <h4 className="text-sm font-semibold text-slate-800 flex items-center gap-2">
-                        <span>{t("dashboard.floor", { floor: floorNum })}</span>
-                        <Badge variant="outline" className="text-[10px] font-normal">
-                          {t("dashboard.roomsCount", { count: floorRooms.length })}
-                        </Badge>
-                      </h4>
-                      <span className="text-xs text-muted-foreground">
-                        {t("dashboard.roomSummaryDetail", { vacant: vacantCount, occupied: occupiedCount })}
+              const vacantCount = floorRooms.filter((r) => String(r.status).toLowerCase() === "vacant").length;
+              const occupiedCount = floorRooms.filter((r) => String(r.status).toLowerCase() === "occupied").length;
+              const dirtyCount = floorRooms.filter((r) => String(r.status).toLowerCase() === "dirty").length;
+              const maintenanceCount = floorRooms.filter((r) => String(r.status).toLowerCase() === "maintenance").length;
+
+              return (
+                <div key={floorNum} className="space-y-3.5">
+                  {/* Floor Header */}
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 border-b border-border/60 pb-2">
+                    <h4 className="text-sm font-bold text-foreground flex items-center gap-2">
+                      <span>{t("dashboard.floor", { floor: floorNum })}</span>
+                      <Badge variant="secondary" className="text-[11px] font-semibold px-2 py-0.5 rounded-md">
+                        {t("dashboard.roomsCount", { count: floorRooms.length })}
+                      </Badge>
+                    </h4>
+                    <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                      <span className="text-emerald-600 dark:text-emerald-400 font-medium">
+                        {vacantCount} {t("dashboard.vacant").toLowerCase()}
                       </span>
+                      <span>•</span>
+                      <span className="text-blue-600 dark:text-blue-400 font-medium">
+                        {occupiedCount} {t("dashboard.occupied").toLowerCase()}
+                      </span>
+                      {dirtyCount > 0 && (
+                        <>
+                          <span>•</span>
+                          <span className="text-amber-600 dark:text-amber-400 font-medium">
+                            {dirtyCount} {t("dashboard.dirty").toLowerCase()}
+                          </span>
+                        </>
+                      )}
+                      {maintenanceCount > 0 && (
+                        <>
+                          <span>•</span>
+                          <span className="text-rose-600 dark:text-rose-400 font-medium">
+                            {maintenanceCount} out of order
+                          </span>
+                        </>
+                      )}
                     </div>
+                  </div>
+
+                  {/* Floor Rooms Display */}
+                  {viewMode === "list" ? (
+                    <div className="overflow-x-auto rounded-xl border border-border/70 bg-card">
+                      <table className="w-full text-left text-xs">
+                        <thead className="border-b border-border/60 bg-muted/40 text-muted-foreground font-semibold">
+                          <tr>
+                            <th className="px-4 py-2.5">Room</th>
+                            <th className="px-4 py-2.5">Type</th>
+                            <th className="px-4 py-2.5">Floor</th>
+                            <th className="px-4 py-2.5">Status</th>
+                            <th className="px-4 py-2.5">Rate</th>
+                            <th className="px-4 py-2.5">Capacity</th>
+                            <th className="px-4 py-2.5 text-right">Action</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-border/40">
+                          {floorRooms.map((room) => {
+                            const sKey = String(room.status || "vacant").toLowerCase();
+                            const config = statusConfig[sKey] || statusConfig.vacant;
+                            const TypeIcon = getTypeIcon(room.type);
+                            return (
+                              <tr
+                                key={room.id}
+                                onClick={() => onRoomClick({ room })}
+                                className="hover:bg-muted/50 cursor-pointer transition-colors"
+                              >
+                                <td className="px-4 py-2.5 font-bold text-foreground">
+                                  <div className="flex items-center gap-2">
+                                    <div
+                                      className="h-2.5 w-2.5 rounded-full"
+                                      style={{ backgroundColor: config.dotColor }}
+                                    />
+                                    <span className="text-sm font-bold">{room.number}</span>
+                                  </div>
+                                </td>
+                                <td className="px-4 py-2.5 text-muted-foreground capitalize">
+                                  <div className="flex items-center gap-1.5">
+                                    <TypeIcon className="h-3.5 w-3.5 text-muted-foreground/80" />
+                                    <span>{room.type}</span>
+                                  </div>
+                                </td>
+                                <td className="px-4 py-2.5 text-muted-foreground font-medium">
+                                  Floor {room.floor}
+                                </td>
+                                <td className="px-4 py-2.5">
+                                  <Badge
+                                    className="text-[10px] px-2 py-0.5 font-medium border-0 capitalize"
+                                    style={{
+                                      backgroundColor: `${config.dotColor}18`,
+                                      color: config.dotColor,
+                                    }}
+                                  >
+                                    {sKey === "maintenance" ? "Out of Order" : t(`dashboard.${config.key}`)}
+                                  </Badge>
+                                </td>
+                                <td className="px-4 py-2.5 font-semibold text-foreground">
+                                  ₹{Number(room.rate).toLocaleString()}
+                                </td>
+                                <td className="px-4 py-2.5 text-muted-foreground">
+                                  <div className="flex items-center gap-1">
+                                    <Users className="h-3 w-3" />
+                                    <span>{room.capacity}</span>
+                                  </div>
+                                </td>
+                                <td className="px-4 py-2.5 text-right">
+                                  <Button size="sm" variant="ghost" className="h-7 px-2 text-xs">
+                                    <Eye className="h-3.5 w-3.5 mr-1" />
+                                    View
+                                  </Button>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : (
                     <motion.div
                       variants={container}
                       initial="hidden"
                       animate="show"
-                      className="grid grid-cols-[repeat(auto-fill,minmax(130px,1fr))] gap-2.5 sm:gap-3"
+                      className={
+                        viewMode === "compact"
+                          ? "grid grid-cols-2 min-[440px]:grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-8 gap-2 sm:gap-2.5"
+                          : "grid grid-cols-1 min-[360px]:grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-7 gap-3 sm:gap-3.5"
+                      }
                     >
                       {floorRooms.map((room) => {
-                        const config = statusConfig[room.status] || statusConfig.vacant;
+                        const sKey = String(room.status || "vacant").toLowerCase();
+                        const config = statusConfig[sKey] || statusConfig.vacant;
                         const roomTypeKey = String(room.type || "").toLowerCase();
-                        const TypeIcon = typeIcons[roomTypeKey] || Bed;
+                        const TypeIcon = getTypeIcon(room.type);
+                        const statusInfo = getStatusSubtext(room.status);
+                        const StatusIcon = statusInfo.icon;
+
                         return (
                           <motion.div
                             key={room.id}
                             variants={item}
-                            transition={{ duration: 0.2, ease: "easeOut" }}
+                            transition={{ duration: 0.18, ease: "easeOut" }}
                             whileHover={{ scale: 1.02, y: -2 }}
-                            whileTap={{ scale: 0.97 }}
+                            whileTap={{ scale: 0.98 }}
                             onClick={() => onRoomClick({ room })}
                             draggable
                             onDragStart={(e) => {
                               (e as any).dataTransfer?.setData("text/plain", String(room.id));
                             }}
-                            className={`relative rounded-2xl border bg-white/80 p-3 shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-lg ${config.border} group overflow-hidden flex flex-col justify-between`}
+                            className={`relative rounded-2xl border bg-card/95 dark:bg-slate-900/90 shadow-2xs hover:shadow-md transition-all hover:-translate-y-0.5 ${
+                              config.border
+                            } group overflow-hidden flex flex-col justify-between cursor-pointer ${
+                              viewMode === "compact" ? "p-2.5 min-h-[105px]" : "p-3 sm:p-3.5 min-h-[128px]"
+                            }`}
                           >
-                            {/* Status dot */}
+                            {/* Status dot in top right */}
                             <div
-                              className="absolute top-2 right-2 h-2 w-2 rounded-full shadow-sm shrink-0"
+                              className="absolute top-2.5 right-2.5 h-2 w-2 rounded-full ring-2 ring-background shrink-0"
                               style={{ backgroundColor: config.dotColor }}
                             />
 
-                            {/* Room number and icon */}
+                            {/* Room number and Type */}
                             <div>
-                              <div className="mb-1 flex items-center justify-between pr-3">
-                                <span className="text-sm font-semibold tracking-tight text-slate-900 truncate">{room.number}</span>
+                              <div className="mb-1 flex items-center justify-between pr-4">
+                                <span className={`font-bold tracking-tight text-foreground truncate ${
+                                  viewMode === "compact" ? "text-sm" : "text-base sm:text-lg"
+                                }`}>
+                                  {room.number}
+                                </span>
                                 <TypeIcon
                                   className="h-3.5 w-3.5 shrink-0"
-                                  style={{ color: config.dotColor, opacity: 0.7 }}
+                                  style={{ color: config.dotColor, opacity: 0.8 }}
                                 />
                               </div>
 
-                              <div className="mb-2 text-[11px] capitalize text-slate-600 truncate" title={t(`dashboard.${roomTypeKey}`, room.type)}>
+                              <div
+                                className="mb-2 text-xs font-medium capitalize text-muted-foreground truncate"
+                                title={room.type}
+                              >
                                 {t(`dashboard.${roomTypeKey}`, room.type)}
                               </div>
                             </div>
 
-                            <div className="space-y-1.5 pt-1 border-t border-slate-100 dark:border-slate-800/60">
-                              <div className="flex flex-wrap items-center justify-between gap-1 min-w-0">
+                            {/* Bottom Details */}
+                            <div className="space-y-1.5 pt-1.5 border-t border-border/50">
+                              <div className="flex items-center justify-between gap-1.5 min-w-0">
                                 <Badge
-                                  className="text-[9px] px-1.5 py-0.5 font-medium max-w-[75px] truncate"
-                                  variant="secondary"
+                                  className="text-[10px] px-1.5 sm:px-2 py-0.5 font-semibold capitalize shrink-0 border-0"
                                   style={{
-                                    backgroundColor: `${config.dotColor}15`,
+                                    backgroundColor: `${config.dotColor}18`,
                                     color: config.dotColor,
                                   }}
-                                  title={t(`dashboard.${config.key}`)}
                                 >
-                                  {t(`dashboard.${config.key}`)}
+                                  {sKey === "maintenance" ? "Out of Order" : t(`dashboard.${config.key}`)}
                                 </Badge>
-                                <span className="text-xs font-bold text-slate-900 shrink-0">₹{room.rate}</span>
+                                <span className="text-xs sm:text-sm font-bold text-foreground shrink-0">
+                                  ₹{Number(room.rate).toLocaleString()}
+                                </span>
                               </div>
 
-                              <div className="flex items-center justify-between text-[10px] text-slate-500 min-w-0 pt-0.5">
+                              <div className="flex items-center justify-between text-[10px] sm:text-[11px] text-muted-foreground min-w-0 pt-0.5">
                                 <div className="flex items-center gap-1 shrink-0">
                                   <Users className="h-3 w-3" />
                                   <span>{room.capacity}</span>
                                 </div>
-                                <div className="flex items-center gap-0.5 text-emerald-600 truncate">
-                                  <ArrowUpRight className="h-3 w-3 shrink-0" />
-                                  <span className="truncate">{t("dashboard.ready")}</span>
+                                <div
+                                  className="flex items-center gap-0.5 font-medium truncate"
+                                  style={{ color: config.dotColor }}
+                                >
+                                  <StatusIcon className="h-3 w-3 shrink-0" />
+                                  <span className="truncate">{statusInfo.label}</span>
                                 </div>
                               </div>
                             </div>
@@ -193,20 +534,22 @@ export default function RoomStatusBoard({ rooms, onRoomClick }: RoomStatusBoardP
                         );
                       })}
                     </motion.div>
+                  )}
+                </div>
+              );
+            })}
 
-                  </div>
-                );
-              })}
-
-            {/* Pagination Controls */}
-            <div className="flex items-center justify-between mt-6 pt-4 border-t border-slate-200 dark:border-slate-800 text-xs text-muted-foreground">
-              <span>{t("common.showing")} {Math.min(rooms.length, (page - 1) * roomsPerPage + 1)} - {Math.min(rooms.length, page * roomsPerPage)} {t("common.total")} {rooms.length}</span>
-              <div className="flex items-center gap-2">
-                <Button size="sm" variant="outline" onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}>{t("common.previous")}</Button>
-                <span className="text-xs font-bold text-foreground">Page {page} of {totalPages}</span>
-                <Button size="sm" variant="outline" onClick={() => setPage(p => p + 1)} disabled={page >= totalPages}>{t("common.next")}</Button>
-              </div>
-            </div>
+            {/* Pagination Controls via DataTablePagination */}
+            <DataTablePagination
+              currentPage={page}
+              totalPages={totalPages}
+              totalItems={sortedRooms.length}
+              pageSize={pageSize}
+              onPageChange={setPage}
+              onPageSizeChange={setPageSize}
+              pageSizeOptions={[10, 20, 30, 50, 0]}
+              itemName="rooms"
+            />
           </div>
         )}
       </CardContent>

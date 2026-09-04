@@ -51,19 +51,22 @@ const getRoomUnavailabilityReason = (room: any): string | null => {
 };
 
 
+import { DataTablePagination } from "@/components/ui/DataTablePagination";
+
 export default function ReservationsPage() {
   const { t } = useTranslation();
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
   const [dialogOpen, setDialogOpen] = useState(false);
 const [selectedCountry, setSelectedCountry] = useState(COUNTRY_CODES[0]);
   const qc = useQueryClient();
     const [editing, setEditing] = useState<any | null>(null);
 
   const reservationsQ = useQuery({
-    queryKey: ["reservations", page, search],
+    queryKey: ["reservations", page, pageSize, search],
     queryFn: async () => {
-      const { data } = await apiClient.reservations.list({ page, limit: 20, q: search });
+      const { data } = await apiClient.reservations.list({ page, limit: pageSize === 0 ? 1000 : pageSize, q: search });
       return normalizeList(data);
     },
   });
@@ -359,13 +362,16 @@ if (emailVal.trim() && !emailRegex.test(emailVal.trim())) {
             </Table>
           </div>
 
-          <div className="flex items-center justify-between mt-4 text-sm text-muted-foreground">
-            <span>{reservationsQ.data?.total ?? 0} total reservations</span>
-            <div className="flex gap-2">
-              <Button size="sm" variant="outline" onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}>Previous</Button>
-              <Button size="sm" variant="outline" onClick={() => setPage(p => p + 1)} disabled={items.length < 20}>Next</Button>
-            </div>
-          </div>
+          <DataTablePagination
+            currentPage={page}
+            totalPages={reservationsQ.data?.pages || Math.ceil((reservationsQ.data?.total ?? 0) / (pageSize || 20)) || 1}
+            totalItems={reservationsQ.data?.total ?? reservationsQ.data?.items?.length ?? 0}
+            pageSize={pageSize}
+            onPageChange={setPage}
+            onPageSizeChange={setPageSize}
+            pageSizeOptions={[10, 20, 50, 0]}
+            itemName="reservations"
+          />
         </CardContent>
       </Card>
 

@@ -13,12 +13,13 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { ledgerFormSchema, LedgerForm } from "@/lib/module5Schemas";
 import { useTranslation } from "react-i18next";
+import { DataTablePagination } from "@/components/ui/DataTablePagination";
 
 export default function CashLedgerPage() {
   const { t } = useTranslation();
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
-  const itemsPerPage = 10;
+  const [itemsPerPage, setItemsPerPage] = useState(10);
   const qc = useQueryClient();
 
   const q = useQuery({ queryKey:["cash-ledger",search, page], queryFn: async ()=>{ const { data } = await apiClient.cashLedger.list({ limit: 50, q: search }); return normalizeListResponse<any>(data); } });
@@ -74,7 +75,7 @@ export default function CashLedgerPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {items.slice((page - 1) * itemsPerPage, page * itemsPerPage).map((r:any)=> (
+                {(itemsPerPage === 0 ? items : items.slice((page - 1) * itemsPerPage, page * itemsPerPage)).map((r:any)=> (
                   <TableRow key={r.id}>
                     <TableCell className="font-semibold">{r.employeeName}</TableCell>
                     <TableCell>₹{r.openingCash}</TableCell>
@@ -92,14 +93,16 @@ export default function CashLedgerPage() {
           </div>
 
           {/* Pagination Controls */}
-          <div className="flex items-center justify-between mt-4 text-sm text-muted-foreground">
-            <span>Showing {Math.min(items.length, (page - 1) * itemsPerPage + 1)} - {Math.min(items.length, page * itemsPerPage)} of {items.length} shift entries</span>
-            <div className="flex items-center gap-2">
-              <Button size="sm" variant="outline" onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}>{t("common.previous")}</Button>
-              <span className="text-xs font-bold text-foreground">Page {page} of {totalPages}</span>
-              <Button size="sm" variant="outline" onClick={() => setPage(p => p + 1)} disabled={page >= totalPages}>{t("common.next")}</Button>
-            </div>
-          </div>
+          <DataTablePagination
+            currentPage={page}
+            totalPages={itemsPerPage === 0 ? 1 : Math.ceil(items.length / itemsPerPage) || 1}
+            totalItems={items.length}
+            pageSize={itemsPerPage}
+            onPageChange={setPage}
+            onPageSizeChange={setItemsPerPage}
+            pageSizeOptions={[10, 20, 50, 0]}
+            itemName="shift entries"
+          />
         </CardContent>
       </Card>
 

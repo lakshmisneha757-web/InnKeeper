@@ -25,7 +25,7 @@ export async function listRoomsNew(req, res) {
       prisma.room.findMany({
         where: whereClause,
         include: { room_type: true, channelInventory: true },
-        orderBy: { room_number: 'asc' },
+        orderBy: [{ floor: 'asc' }, { id: 'asc' }],
         skip,
         take
       })

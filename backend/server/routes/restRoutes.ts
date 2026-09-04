@@ -172,7 +172,7 @@ router.get("/rooms", async (req: Request, res: Response, next: NextFunction) => 
       const skip = (page - 1) * limit;
       const where = buildSearchFilter(q) ?? {};
       const [items, total] = await Promise.all([
-        prisma.room.findMany({ where, skip, take: limit, orderBy: buildSort(sortBy, sortOrder) ?? { room_number: "asc" }, include: { room_type: true } }),
+        prisma.room.findMany({ where, skip, take: limit, orderBy: buildSort(sortBy, sortOrder) ?? [{ floor: "asc" }, { id: "asc" }], include: { room_type: true } }),
         prisma.room.count({ where }),
       ]);
       const normalizedItems = items.map((r: any) => ({
@@ -979,7 +979,7 @@ router.get("/room-availability", async (req: Request, res: Response, next: NextF
     const { page, limit, sortBy, sortOrder, q } = parsePagination(req);
     const payload = await withDatabase(async () => {
       const skip = (page - 1) * limit;
-      const rooms = await prisma.room.findMany({ where: q ? { OR: [{ room_number: { contains: q, mode: "insensitive" as const } }] } : {}, skip, take: limit, orderBy: buildSort(sortBy, sortOrder) ?? { room_number: "asc" } });
+      const rooms = await prisma.room.findMany({ where: q ? { OR: [{ room_number: { contains: q, mode: "insensitive" as const } }] } : {}, skip, take: limit, orderBy: buildSort(sortBy, sortOrder) ?? [{ floor: "asc" }, { id: "asc" }] });
       return { items: rooms, page, limit, total: rooms.length, pages: 1 };
     }, { items: [], page, limit, total: 0, pages: 0 });
     res.json(payload);

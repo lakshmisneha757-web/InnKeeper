@@ -13,6 +13,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { paymentFormSchema, PaymentForm } from "@/lib/module5Schemas";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { DataTablePagination } from "@/components/ui/DataTablePagination";
 
 import { useTranslation } from "react-i18next";
 
@@ -20,12 +21,13 @@ export default function PaymentsPage() {
   const { t } = useTranslation();
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
   const qc = useQueryClient();
 
   const paymentsQ = useQuery({
-    queryKey: ["payments", page, search],
+    queryKey: ["payments", page, pageSize, search],
     queryFn: async () => {
-      const { data } = await apiClient.payments.list({ page, limit: 20, q: search });
+      const { data } = await apiClient.payments.list({ page, limit: pageSize === 0 ? 1000 : pageSize, q: search });
       return normalizeListResponse<any>(data);
     },
   });
@@ -155,6 +157,17 @@ export default function PaymentsPage() {
               </TableBody>
             </Table>
           </div>
+
+          <DataTablePagination
+            currentPage={page}
+            totalPages={paymentsQ.data?.pages || Math.ceil((paymentsQ.data?.total ?? 0) / (pageSize || 20)) || 1}
+            totalItems={paymentsQ.data?.total ?? paymentsQ.data?.items?.length ?? 0}
+            pageSize={pageSize}
+            onPageChange={setPage}
+            onPageSizeChange={setPageSize}
+            pageSizeOptions={[10, 20, 50, 0]}
+            itemName="payments"
+          />
         </CardContent>
       </Card>
     </div>

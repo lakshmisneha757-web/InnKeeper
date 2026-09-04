@@ -15,6 +15,8 @@ import { Plus, Search, Edit, Trash2, Star } from "lucide-react";
 
 import { useTranslation } from "react-i18next";
 
+import { DataTablePagination } from "@/components/ui/DataTablePagination";
+
 function normalizeList(data: any) {
   if (Array.isArray(data)) return { items: data, total: data.length };
   if (data?.items) return data;
@@ -25,14 +27,15 @@ export default function GuestsPage() {
   const { t } = useTranslation();
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<any | null>(null);
   const qc = useQueryClient();
 
   const guestsQ = useQuery({
-    queryKey: ["guests", page, search],
+    queryKey: ["guests", page, pageSize, search],
     queryFn: async () => {
-      const { data } = await apiClient.guests.list({ page, limit: 20, q: search });
+      const { data } = await apiClient.guests.list({ page, limit: pageSize === 0 ? 1000 : pageSize, q: search });
       return normalizeList(data);
     },
   });
@@ -186,13 +189,16 @@ export default function GuestsPage() {
             </Table>
           </div>
 
-          <div className="flex items-center justify-between mt-4 text-sm text-muted-foreground">
-            <span>{guestsQ.data?.total ?? 0} total guests</span>
-            <div className="flex gap-2">
-              <Button size="sm" variant="outline" onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}>Previous</Button>
-              <Button size="sm" variant="outline" onClick={() => setPage(p => p + 1)} disabled={items.length < 20}>Next</Button>
-            </div>
-          </div>
+          <DataTablePagination
+            currentPage={page}
+            totalPages={guestsQ.data?.pages || Math.ceil((guestsQ.data?.total ?? 0) / (pageSize || 20)) || 1}
+            totalItems={guestsQ.data?.total ?? guestsQ.data?.items?.length ?? 0}
+            pageSize={pageSize}
+            onPageChange={setPage}
+            onPageSizeChange={setPageSize}
+            pageSizeOptions={[10, 20, 50, 0]}
+            itemName="guests"
+          />
         </CardContent>
       </Card>
 

@@ -13,6 +13,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { vehicleFormSchema, VehicleForm } from "@/lib/module5Schemas";
 import { toast } from "sonner";
 import { validateIndianLicensePlate, validateVehicleBrandModel } from "@/lib/validation";
+import { DataTablePagination } from "@/components/ui/DataTablePagination";
 
 import { useTranslation } from "react-i18next";
 
@@ -20,13 +21,14 @@ export default function VehiclesPage(){
   const { t } = useTranslation();
   const [search,setSearch]=useState("");
   const [page,setPage]=useState(1);
+  const [pageSize, setPageSize] = useState(15);
   const qc = useQueryClient();
 
   const q = useQuery({
-    queryKey: ["vehicles", page, search],
+    queryKey: ["vehicles", page, pageSize, search],
     queryFn: async () => {
       const [{ data: vData }, { data: resData }] = await Promise.all([
-        apiClient.vehicles.list({ page, limit: 50, q: search }),
+        apiClient.vehicles.list({ page, limit: pageSize === 0 ? 1000 : pageSize, q: search }),
         apiClient.reservations.list({ limit: 100 }),
       ]);
       const vList = normalizeListResponse<any>(vData).items;
@@ -139,6 +141,17 @@ export default function VehiclesPage(){
               </TableBody>
             </Table>
           </div>
+
+          <DataTablePagination
+            currentPage={page}
+            totalPages={q.data?.pages || Math.ceil((q.data?.total ?? 0) / (pageSize || 15)) || 1}
+            totalItems={q.data?.total ?? q.data?.items?.length ?? 0}
+            pageSize={pageSize}
+            onPageChange={setPage}
+            onPageSizeChange={setPageSize}
+            pageSizeOptions={[10, 15, 25, 50, 0]}
+            itemName="vehicles"
+          />
         </CardContent>
       </Card>
 

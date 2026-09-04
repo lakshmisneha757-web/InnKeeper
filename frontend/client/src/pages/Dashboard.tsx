@@ -100,12 +100,27 @@ export default function Dashboard() {
     return () => clearInterval(interval);
   }, [fetchAll]);
 
+  // Extract available floors and types dynamically from rooms
+  const availableFloors = useMemo(() => {
+    const floors = Array.from(new Set(rooms.map((r: any) => Number(r.floor))))
+      .filter((f) => !isNaN(f))
+      .sort((a, b) => a - b);
+    return floors.length > 0 ? floors : [1, 2, 3, 4];
+  }, [rooms]);
+
+  const availableTypes = useMemo(() => {
+    const types = Array.from(new Set(rooms.map((r: any) => r.type)))
+      .filter((t): t is string => Boolean(t))
+      .sort();
+    return types.length > 0 ? types : ["Standard", "Deluxe", "Suite", "Premium", "Family"];
+  }, [rooms]);
+
   // Filtered rooms
   const filteredRooms = useMemo(() => {
-    return rooms.filter((room: any) => {
-      if (filterType !== "all" && room.type !== filterType) return false;
-      if (filterFloor !== null && room.floor !== filterFloor) return false;
-      if (filterStatus !== "all" && room.status !== filterStatus) return false;
+    const list = rooms.filter((room: any) => {
+      if (filterType !== "all" && String(room.type || "").toLowerCase() !== String(filterType).toLowerCase()) return false;
+      if (filterFloor !== null && Number(room.floor) !== Number(filterFloor)) return false;
+      if (filterStatus !== "all" && String(room.status || "").toLowerCase() !== String(filterStatus).toLowerCase()) return false;
       if (searchQuery) {
         const q = searchQuery.toLowerCase();
         const guest = guests.find((g: any) => {
@@ -119,6 +134,13 @@ export default function Dashboard() {
         return matchesName || matchesGuest;
       }
       return true;
+    });
+
+    return list.sort((a: any, b: any) => {
+      const floorA = Number(a.floor) || 0;
+      const floorB = Number(b.floor) || 0;
+      if (floorA !== floorB) return floorA - floorB;
+      return String(a.number).localeCompare(String(b.number), undefined, { numeric: true });
     });
   }, [rooms, filterType, filterFloor, filterStatus, searchQuery, guests, reservations]);
 
@@ -321,14 +343,14 @@ export default function Dashboard() {
           {/* Filters */}
           <Card>
             <CardContent className="pt-6">
-              <div className="flex flex-wrap items-center gap-4">
-                <div className="relative max-w-md flex-1 min-w-50">
+              <div className="flex flex-col lg:flex-row lg:items-center gap-3 sm:gap-4">
+                <div className="relative flex-1 min-w-0">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                   <Input
                     placeholder={t("dashboard.searchPlaceholder")}
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    className="pl-10"
+                    className="pl-10 h-10 w-full"
                   />
                   {searchQuery && (
                     <Button
@@ -342,49 +364,52 @@ export default function Dashboard() {
                   )}
                 </div>
 
-                <Select value={filterType} onValueChange={(v) => setFilterType(v as any)}>
-                  <SelectTrigger className="w-37.5">
-                    <SelectValue placeholder={t("dashboard.allTypes")} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">{t("dashboard.allTypes")}</SelectItem>
-                    <SelectItem value="standard">Standard</SelectItem>
-                    <SelectItem value="deluxe">Deluxe</SelectItem>
-                    <SelectItem value="suite">Suite</SelectItem>
-                    <SelectItem value="premium">Premium</SelectItem>
-                    <SelectItem value="family">Family</SelectItem>
-                  </SelectContent>
-                </Select>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 sm:gap-3 shrink-0">
+                  <Select value={filterType} onValueChange={(v) => setFilterType(v as any)}>
+                    <SelectTrigger className="w-full sm:w-36 md:w-40 h-10">
+                      <SelectValue placeholder={t("dashboard.allTypes")} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">{t("dashboard.allTypes")}</SelectItem>
+                      {availableTypes.map((type) => (
+                        <SelectItem key={type} value={type} className="capitalize">
+                          {t(`dashboard.${type.toLowerCase()}`, type)}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
 
-                <Select
-                  value={String(filterFloor ?? "all")}
-                  onValueChange={(v) => setFilterFloor(v === "all" ? null : Number(v))}
-                >
-                  <SelectTrigger className="w-30">
-                    <SelectValue placeholder={t("dashboard.allFloors")} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">{t("dashboard.allFloors")}</SelectItem>
-                    <SelectItem value="1">{t("dashboard.floor", { floor: 1 })}</SelectItem>
-                    <SelectItem value="2">{t("dashboard.floor", { floor: 2 })}</SelectItem>
-                    <SelectItem value="3">{t("dashboard.floor", { floor: 3 })}</SelectItem>
-                    <SelectItem value="4">{t("dashboard.floor", { floor: 4 })}</SelectItem>
-                  </SelectContent>
-                </Select>
+                  <Select
+                    value={String(filterFloor ?? "all")}
+                    onValueChange={(v) => setFilterFloor(v === "all" ? null : Number(v))}
+                  >
+                    <SelectTrigger className="w-full sm:w-32 md:w-36 h-10">
+                      <SelectValue placeholder={t("dashboard.allFloors")} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">{t("dashboard.allFloors")}</SelectItem>
+                      {availableFloors.map((floorNum) => (
+                        <SelectItem key={floorNum} value={String(floorNum)}>
+                          {t("dashboard.floor", { floor: floorNum })}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
 
-                <Select value={filterStatus} onValueChange={(v) => setFilterStatus(v as any)}>
-                  <SelectTrigger className="w-37.5">
-                    <SelectValue placeholder={t("dashboard.allStatus")} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">{t("dashboard.allStatus")}</SelectItem>
-                    <SelectItem value="vacant">{t("dashboard.vacant")}</SelectItem>
-                    <SelectItem value="occupied">{t("dashboard.occupied")}</SelectItem>
-                    <SelectItem value="dirty">{t("dashboard.dirty")}</SelectItem>
-                    <SelectItem value="maintenance">{t("dashboard.maintenance")}</SelectItem>
-                    <SelectItem value="reserved">{t("dashboard.reserved")}</SelectItem>
-                  </SelectContent>
-                </Select>
+                  <Select value={filterStatus} onValueChange={(v) => setFilterStatus(v as any)}>
+                    <SelectTrigger className="w-full sm:w-36 md:w-40 h-10">
+                      <SelectValue placeholder={t("dashboard.allStatus")} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">{t("dashboard.allStatus")}</SelectItem>
+                      <SelectItem value="vacant">{t("dashboard.vacant")}</SelectItem>
+                      <SelectItem value="occupied">{t("dashboard.occupied")}</SelectItem>
+                      <SelectItem value="dirty">{t("dashboard.dirty")}</SelectItem>
+                      <SelectItem value="maintenance">{t("dashboard.maintenance")}</SelectItem>
+                      <SelectItem value="reserved">{t("dashboard.reserved")}</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
             </CardContent>
           </Card>

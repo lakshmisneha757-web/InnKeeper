@@ -280,7 +280,11 @@ export default function CheckInVerification() {
         },
         handler: async (response) => {
           verificationStarted = true;
-          if (!response.razorpay_order_id || !response.razorpay_payment_id || !response.razorpay_signature) {
+          const orderId = response.razorpay_order_id || (response as any).razorpayOrderId;
+          const paymentId = response.razorpay_payment_id || (response as any).razorpayPaymentId;
+          const signature = response.razorpay_signature || (response as any).razorpaySignature;
+
+          if (!orderId || !paymentId || !signature) {
             await finish(false, "Razorpay returned an invalid payment response.");
             return;
           }
@@ -289,7 +293,15 @@ export default function CheckInVerification() {
             const verifyResponse = await fetch("/api/checkin/payment/verify", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify(response),
+              credentials: "include",
+              body: JSON.stringify({
+                razorpayOrderId: orderId,
+                razorpayPaymentId: paymentId,
+                razorpaySignature: signature,
+                razorpay_order_id: orderId,
+                razorpay_payment_id: paymentId,
+                razorpay_signature: signature,
+              }),
             });
             const verifyData = await verifyResponse.json().catch(() => null);
             if (!verifyResponse.ok || !verifyData?.success || verifyData.status !== "Paid") {
