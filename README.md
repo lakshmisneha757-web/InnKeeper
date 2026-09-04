@@ -1,289 +1,114 @@
-# 🏨 InnKeeper
+# InnKeeper 🏨
 
-**InnKeeper** is a modern, full-stack **Motel & Hotel Management Application** designed to simplify room bookings, customer management, front-desk operations, and administrative tasks.
-
----
-
-## 🚀 Features
-
-* 🔐 **Authentication & Authorization**
-  Secure JWT-based authentication for admins and staff.
-
-* 🛏️ **Room & Inventory Management**
-  Track room availability, pricing, and maintenance status.
-
-* 📅 **Reservations & Booking**
-  Manage reservations, check-ins, check-outs, and guest details.
-
-* 📊 **Dashboard & Analytics**
-  Monitor occupancy, reservations, and operational insights.
+InnKeeper is a comprehensive Motel & Hotel Management Application designed to streamline front desk operations, booking management, customer records, and administrative workflows.
 
 ---
 
-## 🛠️ Tech Stack
+## 🏗 Project Architecture
+
+This project is structured as a full-stack monorepo:
+
+- **`backend/`**: Node.js & Express API server powered by Prisma ORM and PostgreSQL.
+- **`frontend/`**: React application built with Vite, Tailwind CSS, Lucide Icons, and modern UI components.
+
+---
+
+## 🛠 Tech Stack
 
 ### Frontend
-
-| Technology            | Purpose                  |
-| --------------------- | ------------------------ |
-| React                 | Frontend framework       |
-| Vite                  | Development & build tool |
-| Tailwind CSS          | Styling                  |
-| Radix UI              | UI components            |
-| React Router / Wouter | Routing                  |
-| TanStack React Query  | Server-state management  |
-| Zustand               | Client-state management  |
+- **Framework:** React + Vite
+- **Styling:** Tailwind CSS + Radix UI
+- **Routing:** React Router / Wouter
+- **State Management & Data Fetching:** TanStack Query (React Query), Zustand
 
 ### Backend
-
-| Technology | Purpose             |
-| ---------- | ------------------- |
-| Node.js    | Runtime environment |
-| Express.js | Backend framework   |
-| Prisma ORM | Database ORM        |
-| PostgreSQL | Database            |
-| JWT        | Authentication      |
-| bcryptjs   | Password hashing    |
+- **Runtime:** Node.js
+- **Framework:** Express.js
+- **Database ORM:** Prisma ORM
+- **Database:** PostgreSQL
+- **Authentication:** JWT (JSON Web Tokens) + bcryptjs
 
 ---
 
-## 📁 Repository Structure
+## 🚀 Getting Started
 
-```text
-InnKeeper/
-│
-├── backend/
-│   ├── prisma/
-│   ├── src/
-│   ├── package.json
-│   └── ...
-│
-├── frontend/
-│   ├── src/
-│   ├── public/
-│   ├── package.json
-│   └── ...
-│
-├── .gitignore
-└── README.md
-```
-
-> **Note:** `.env` files and `node_modules` are intentionally excluded from the repository for security and performance reasons.
+### Prerequisites
+- Node.js (v18+ recommended)
+- npm or yarn
+- PostgreSQL instance running locally or hosted
 
 ---
 
-# 🔧 Getting Started
+## 📦 Installation & Setup
 
-Follow the steps below to run InnKeeper locally.
-
-## 1. Clone the Repository
-
+### 1. Clone the repository
 ```bash
-git clone https://github.com/your-username/InnKeeper.git
+git clone <repository-url>
 cd InnKeeper
 ```
 
----
-
-## 2. Backend Setup
-
-Navigate to the backend directory:
+### 2. Backend Setup
+Navigate to the `backend` directory, install dependencies, and setup environment variables:
 
 ```bash
 cd backend
-```
-
-Install the required dependencies:
-
-```bash
 npm install
 ```
 
-### Create Backend Environment Variables
-
-Create a `.env` file inside the `backend` folder.
-
+Create a `.env` file inside the `backend` folder:
 ```env
 PORT=5000
 DATABASE_URL="postgresql://username:password@localhost:5432/innkeeper_db?schema=public"
-JWT_SECRET="your_secret_key"
+JWT_SECRET="your_jwt_secret_key"
 ```
 
-> ⚠️ Do not commit the `.env` file to GitHub.
-
-### Generate Prisma Client
-
-```bash
-npm run prisma:generate
-```
-
-### Run Database Migrations
-
-```bash
-npm run prisma:migrate
-```
-
-### Start the Backend Server
-
-```bash
-npm run dev
-```
-
-The backend server will run on:
-
-```text
-http://localhost:5000
-```
-
----
-
-# 3. Frontend Setup
-
-Open a **new terminal** and navigate to the frontend directory:
-
-```bash
-cd frontend
-```
-
-Install dependencies:
-
-```bash
-npm install
-```
-
-### Create Frontend Environment Variables
-
-Create a `.env` file inside the `frontend` folder.
-
-```env
-VITE_API_BASE_URL=http://localhost:5000/api
-```
-
-> ⚠️ Do not commit the `.env` file to GitHub.
-
-### Start the Frontend
-
-```bash
-npm run dev
-```
-
-The frontend will be available at the URL displayed by Vite, usually:
-
-```text
-http://localhost:5173
-```
-
----
-
-# 📜 Scripts Reference
-
-## Backend
-
-Run these commands from the `backend/` directory.
-
-| Command                   | Description                                  |
-| ------------------------- | -------------------------------------------- |
-| `npm run dev`             | Starts the backend server with hot reload    |
-| `npm run start`           | Starts the backend server in production mode |
-| `npm run prisma:generate` | Generates the Prisma client                  |
-| `npm run prisma:migrate`  | Runs database migrations                     |
-
-## Frontend
-
-Run these commands from the `frontend/` directory.
-
-| Command           | Description                           |
-| ----------------- | ------------------------------------- |
-| `npm run dev`     | Starts the Vite development server    |
-| `npm run build`   | Builds the application for production |
-| `npm run preview` | Previews the production build locally |
-
----
-
-# 🔐 Environment Variables
-
-The project uses environment variables for configuration and sensitive information.
-
-### Backend `.env`
-
-```env
-PORT=5000
-DATABASE_URL="your_postgresql_database_url"
-JWT_SECRET="your_jwt_secret"
-```
-
-### Frontend `.env`
-
-```env
-VITE_API_BASE_URL=http://localhost:5000/api
-```
-
-**Never commit actual passwords, database credentials, JWT secrets, or API keys to GitHub.**
-
----
-
-# 🗄️ Database
-
-InnKeeper uses:
-
-* **PostgreSQL** as the database
-* **Prisma ORM** for database management
-
-After configuring the PostgreSQL database, run:
-
+Run database migrations:
 ```bash
 npm run prisma:generate
 npm run prisma:migrate
 ```
 
-from the `backend/` directory.
-
----
-
-# ▶️ Running the Complete Application
-
-You need **two terminals**.
-
-### Terminal 1 — Backend
-
+Start the backend server:
 ```bash
-cd backend
-npm install
-npm run prisma:generate
-npm run prisma:migrate
 npm run dev
 ```
 
-### Terminal 2 — Frontend
+### 3. Frontend Setup
+In a new terminal window, navigate to the `frontend` directory:
 
 ```bash
 cd frontend
 npm install
+```
+
+Create a `.env` file inside the `frontend` folder:
+```env
+VITE_API_BASE_URL=http://localhost:5000/api
+```
+
+Start the frontend development server:
+```bash
 npm run dev
 ```
 
-Then open the frontend URL provided by Vite in your browser.
+---
+
+## 📜 Available Scripts
+
+### Backend (`backend/`)
+- `npm run dev`: Starts the backend server in development mode using `nodemon`.
+- `npm run start`: Runs the production server.
+- `npm run prisma:generate`: Generates Prisma Client artifacts.
+- `npm run prisma:migrate`: Applies database migrations.
+- `npm run prisma:seed`: Seeds initial data into the database.
+
+### Frontend (`frontend/`)
+- `npm run dev`: Starts the Vite development server.
+- `npm run build`: Builds the project for production.
+- `npm run preview`: Previews the production build locally.
 
 ---
 
-# 🔒 Git & Security
+## 🛡 License
 
-The following files and folders should **not** be committed to GitHub:
-
-```text
-node_modules/
-.env
-.env.*
-dist/
-build/
-```
-
-Make sure they are included in your `.gitignore` file.
-
----
-
-# 👨‍💻 Project
-
-**InnKeeper — Motel & Hotel Management System**
-
-Built using **React, Vite, Node.js, Express.js, Prisma, and PostgreSQL**.
+This project is proprietary and confidential.

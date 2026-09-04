@@ -10,6 +10,19 @@ import {
   CleaningLog,
 } from '@/types';
 import { realtimeHub } from '@/lib/socketSim';
+import {
+  fetchRooms,
+  fetchMaintenance,
+  fetchNotifications,
+  startRoomCleaning,
+  markRoomClean,
+  markRoomDirty,
+  markRoomInspected,
+  createMaintenanceIssue,
+  updateMaintenanceTicket,
+  markNotificationAsRead,
+  clearNotifications,
+} from '@/services/api';
 
 interface AppState {
   activeRole: Role;
@@ -123,16 +136,8 @@ export const useStore = create<AppState>((set, get) => ({
   fetchRoomsFromDb: async () => {
     try {
       set({ isLoading: true });
-
-      const res = await fetch('/api/rooms');
-      const json = await res.json();
-
-      if (!res.ok) {
-        throw new Error(
-          json?.error || `Failed to fetch rooms: ${res.status}`
-        );
-      }
-
+      const response = await fetchRooms();
+      const json = response.data;
       if (json.success) {
         set({ rooms: json.data });
       } else if (Array.isArray(json)) {
@@ -148,15 +153,8 @@ export const useStore = create<AppState>((set, get) => ({
   // Fetch Tickets from Backend
   fetchTicketsFromDb: async () => {
     try {
-      const res = await fetch('/api/maintenance');
-      const json = await res.json();
-
-      if (!res.ok) {
-        throw new Error(
-          json?.error || `Failed to fetch tickets: ${res.status}`
-        );
-      }
-
+      const response = await fetchMaintenance();
+      const json = response.data;
       if (json.success) {
         set({ tickets: json.data });
       } else if (Array.isArray(json)) {
@@ -170,15 +168,8 @@ export const useStore = create<AppState>((set, get) => ({
   // Fetch Notifications from Backend
   fetchNotificationsFromDb: async () => {
     try {
-      const res = await fetch('/api/notifications');
-      const json = await res.json();
-
-      if (!res.ok) {
-        throw new Error(
-          json?.error ||
-            `Failed to fetch notifications: ${res.status}`
-        );
-      }
+      const response = await fetchNotifications();
+      const json = response.data;
 
       const notificationData = json.success
         ? json.data
@@ -220,19 +211,9 @@ export const useStore = create<AppState>((set, get) => ({
         ),
       }));
 
-      const res = await fetch(`/api/rooms/${roomId}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          status: 'CLEANING_IN_PROGRESS',
-        }),
-      });
-
-      const json = await res.json();
-
-      if (res.ok && json.success) {
+      const response = await startRoomCleaning(roomId);
+      const json = response.data;
+      if (json.success) {
         const updatedRoom = json.data;
 
         realtimeHub.emit('room_updated', {
@@ -242,7 +223,7 @@ export const useStore = create<AppState>((set, get) => ({
         });
 
         await get().fetchNotificationsFromDb();
-      } else if (res.ok && json.id) {
+      } else if (json.id) {
         realtimeHub.emit('room_updated', {
           roomId,
           status: 'CLEANING_IN_PROGRESS',
@@ -284,19 +265,9 @@ export const useStore = create<AppState>((set, get) => ({
         ),
       }));
 
-      const res = await fetch(`/api/rooms/${roomId}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          status: 'CLEAN',
-        }),
-      });
-
-      const json = await res.json();
-
-      if (res.ok && json.success) {
+      const response = await markRoomClean(roomId, notes);
+      const json = response.data;
+      if (json.success) {
         realtimeHub.emit('room_updated', {
           roomId,
           status: 'CLEAN',
@@ -305,7 +276,7 @@ export const useStore = create<AppState>((set, get) => ({
 
         await get().fetchRoomsFromDb();
         await get().fetchNotificationsFromDb();
-      } else if (res.ok && json.id) {
+      } else if (json.id) {
         realtimeHub.emit('room_updated', {
           roomId,
           status: 'CLEAN',
@@ -337,19 +308,9 @@ export const useStore = create<AppState>((set, get) => ({
         ),
       }));
 
-      const res = await fetch(`/api/rooms/${roomId}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          status: 'DIRTY',
-        }),
-      });
-
-      const json = await res.json();
-
-      if (res.ok && (json.success || json.id)) {
+      const response = await markRoomDirty(roomId);
+      const json = response.data;
+      if (json.success || json.id) {
         realtimeHub.emit('room_updated', {
           roomId,
           status: 'DIRTY',
@@ -378,19 +339,9 @@ export const useStore = create<AppState>((set, get) => ({
         ),
       }));
 
-      const res = await fetch(`/api/rooms/${roomId}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          status: 'CLEAN',
-        }),
-      });
-
-      const json = await res.json();
-
-      if (res.ok && (json.success || json.id)) {
+      const response = await markRoomInspected(roomId);
+      const json = response.data;
+      if (json.success || json.id) {
         realtimeHub.emit('room_updated', {
           roomId,
           status: 'CLEAN',
@@ -415,28 +366,19 @@ export const useStore = create<AppState>((set, get) => ({
     images,
   }) => {
     try {
-      const res = await fetch('/api/maintenance', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          roomId,
-          category,
-          title,
-          description,
-          priority,
-          images,
-        }),
+      const response = await createMaintenanceIssue({
+        roomId,
+        category,
+        title,
+        description,
+        priority,
+        images,
       });
 
-      const json = await res.json();
-
-      if (res.ok && json.success) {
+      const json = response.data;
+      if (json.success) {
         const newTicket = json.data;
-
         realtimeHub.emit('maintenance_created', newTicket);
-
         await get().fetchRoomsFromDb();
         await get().fetchTicketsFromDb();
         await get().fetchNotificationsFromDb();
@@ -455,21 +397,11 @@ export const useStore = create<AppState>((set, get) => ({
     techName = 'Alex Rivera'
   ) => {
     try {
-      const res = await fetch(
-        `/api/maintenance/${ticketId}`,
-        {
-          method: 'PUT',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            action: 'ACCEPT',
-            techName,
-          }),
-        }
-      );
-
-      if (res.ok) {
+      const response = await updateMaintenanceTicket(ticketId, {
+        action: 'ACCEPT',
+        techName,
+      });
+      if (response.data) {
         await get().fetchTicketsFromDb();
       }
     } catch (err) {
@@ -480,20 +412,10 @@ export const useStore = create<AppState>((set, get) => ({
   // Reject Maintenance Ticket
   rejectTicket: async (ticketId) => {
     try {
-      const res = await fetch(
-        `/api/maintenance/${ticketId}`,
-        {
-          method: 'PUT',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            action: 'REJECT',
-          }),
-        }
-      );
-
-      if (res.ok) {
+      const response = await updateMaintenanceTicket(ticketId, {
+        action: 'REJECT',
+      });
+      if (response.data) {
         await get().fetchTicketsFromDb();
       }
     } catch (err) {
@@ -507,21 +429,11 @@ export const useStore = create<AppState>((set, get) => ({
     estimatedTime = '1 Hour'
   ) => {
     try {
-      const res = await fetch(
-        `/api/maintenance/${ticketId}`,
-        {
-          method: 'PUT',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            action: 'START',
-            estimatedTime,
-          }),
-        }
-      );
-
-      if (res.ok) {
+      const response = await updateMaintenanceTicket(ticketId, {
+        action: 'START',
+        estimatedTime,
+      });
+      if (response.data) {
         await get().fetchTicketsFromDb();
       }
     } catch (err) {
@@ -532,20 +444,10 @@ export const useStore = create<AppState>((set, get) => ({
   // Pause Repair
   pauseRepair: async (ticketId) => {
     try {
-      const res = await fetch(
-        `/api/maintenance/${ticketId}`,
-        {
-          method: 'PUT',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            action: 'PAUSE',
-          }),
-        }
-      );
-
-      if (res.ok) {
+      const response = await updateMaintenanceTicket(ticketId, {
+        action: 'PAUSE',
+      });
+      if (response.data) {
         await get().fetchTicketsFromDb();
       }
     } catch (err) {
@@ -561,23 +463,13 @@ export const useStore = create<AppState>((set, get) => ({
     finalRoomStatus = 'DIRTY'
   ) => {
     try {
-      const res = await fetch(
-        `/api/maintenance/${ticketId}`,
-        {
-          method: 'PUT',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            action: 'COMPLETE',
-            notes,
-            completionImages,
-            finalRoomStatus,
-          }),
-        }
-      );
-
-      if (res.ok) {
+      const response = await updateMaintenanceTicket(ticketId, {
+        action: 'COMPLETE',
+        notes,
+        completionImages,
+        finalRoomStatus,
+      });
+      if (response.data) {
         await get().fetchRoomsFromDb();
         await get().fetchTicketsFromDb();
         await get().fetchNotificationsFromDb();
@@ -590,26 +482,7 @@ export const useStore = create<AppState>((set, get) => ({
   // Mark Notification Read
   markNotificationRead: async (id) => {
     try {
-      const res = await fetch(
-        '/api/notifications/mark-read',
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            id,
-            ids: [id],
-          }),
-        }
-      );
-
-      if (!res.ok) {
-        throw new Error(
-          `Failed to mark notification as read: ${res.status}`
-        );
-      }
-
+      await markNotificationAsRead(id);
       set((state) => ({
         notifications: state.notifications.map((notification) =>
           notification.id === id
@@ -631,16 +504,7 @@ export const useStore = create<AppState>((set, get) => ({
   // Clear All Notifications
   clearAllNotifications: async () => {
     try {
-      const res = await fetch('/api/notifications', {
-        method: 'DELETE',
-      });
-
-      if (!res.ok) {
-        throw new Error(
-          `Failed to clear notifications: ${res.status}`
-        );
-      }
-
+      await clearNotifications();
       set({
         notifications: [],
       });

@@ -32,11 +32,16 @@ export async function createNotification(req, res) {
 
 export async function markRead(req, res) {
   try {
-    const rawIds = req.body?.ids || (req.body?.id !== undefined ? [req.body.id] : undefined);
+    const { id, ids } = req.body || {};
     // If specific IDs provided, mark only those; otherwise mark all unread
-    if (rawIds && Array.isArray(rawIds) && rawIds.length > 0) {
+    if (id !== undefined && id !== null) {
       await prisma.appNotification.updateMany({
-        where: { id: { in: rawIds.map(Number) } },
+        where: { id: Number(id) },
+        data: { isRead: true }
+      });
+    } else if (ids && Array.isArray(ids) && ids.length > 0) {
+      await prisma.appNotification.updateMany({
+        where: { id: { in: ids.map(Number) } },
         data: { isRead: true }
       });
     } else {
@@ -56,7 +61,10 @@ export async function clearNotifications(req, res) {
     await prisma.appNotification.deleteMany({});
     res.json({ success: true });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error('Failed to clear notifications:', err);
+    res.status(500).json({
+      success: false,
+      error: err.message
+    });
   }
 }
-

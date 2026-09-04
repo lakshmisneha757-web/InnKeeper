@@ -71,17 +71,14 @@ export default function ResetPasswordPage() {
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
     if (!validate()) return;
+    const token = params.get('token') || '';
     try {
-      await resetPassword({ email: form.email, token: 'demo-reset-token', password: form.password, confirmPassword: form.confirmPassword });
-    } catch {
-      // Ignore network errors in demo environment
+      await resetPassword({ email: form.email.trim(), token, password: form.password, confirmPassword: form.confirmPassword });
+      toast.success('Password reset successfully! Please log in.');
+      setLocation(`/login?email=${encodeURIComponent(form.email.trim())}`);
+    } catch (err: any) {
+      toast.error(err?.response?.data?.error || err?.message || 'Failed to reset password.');
     }
-
-    // Update stored user password so login accepts the new password
-    updateStoredUserPassword(form.email, form.password);
-
-    toast.success('Password reset successfully!');
-    setLocation(`/login?email=${encodeURIComponent(form.email.trim())}`);
   };
 
   return (
@@ -96,7 +93,7 @@ export default function ResetPasswordPage() {
             <p className="mt-2 text-sm text-slate-600">Set a fresh password for your InnKeeper account.</p>
           </div>
 
-          <form onSubmit={handleSubmit} className="space-y-4" noValidate>
+          <form onSubmit={handleSubmit} className="space-y-4" noValidate autoComplete="off">
             <div className="space-y-2">
               <Label htmlFor="email">Email</Label>
               <Input
@@ -105,6 +102,7 @@ export default function ResetPasswordPage() {
                 value={form.email}
                 onChange={(e) => setForm((prev) => ({ ...prev, email: e.target.value }))}
                 placeholder="you@innkeeper.com"
+                autoComplete="off"
               />
               {errors.email ? <p className="text-sm text-red-500">{errors.email}</p> : null}
             </div>
@@ -118,6 +116,7 @@ export default function ResetPasswordPage() {
                   value={form.password}
                   onChange={(e) => setForm((prev) => ({ ...prev, password: e.target.value }))}
                   placeholder="Create new password"
+                  autoComplete="new-password"
                 />
                 <button type="button" onClick={() => setShowPassword((prev) => !prev)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700">
                   {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
@@ -135,6 +134,7 @@ export default function ResetPasswordPage() {
                   value={form.confirmPassword}
                   onChange={(e) => setForm((prev) => ({ ...prev, confirmPassword: e.target.value }))}
                   placeholder="Confirm new password"
+                  autoComplete="new-password"
                 />
                 <button type="button" onClick={() => setShowConfirmPassword((prev) => !prev)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700">
                   {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}

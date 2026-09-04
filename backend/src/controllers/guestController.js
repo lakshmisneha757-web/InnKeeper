@@ -1,5 +1,4 @@
-import { PrismaClient } from '@prisma/client';
-const prisma = new PrismaClient();
+import { prisma } from '../utils/db.js';
 
 function paginate(data, page, limit) {
   const total = data.length;
@@ -51,12 +50,34 @@ function validateServerGuest(data) {
     }
   }
   if (data.phone) {
-    const cleanPhone = String(data.phone).replace(/\D/g, '');
-    if (cleanPhone.length !== 10 || !/^[6-9]\d{9}$/.test(cleanPhone) || /^(\d)\1{9}$/.test(cleanPhone) || cleanPhone === '1234567890') {
-      return 'Please provide a valid 10-digit mobile phone number.';
-    }
+  const phone = String(data.phone).trim();
+  const cleanPhone = phone.replace(/\D/g, '');
+
+  // International phone numbers:
+  // - Optional leading +
+  // - 10 to 15 digits total
+  // - Reject repeated digits and known invalid test number
+  const internationalPhoneRegex = /^\+?[1-9]\d{9,14}$/;
+
+  if (
+    !internationalPhoneRegex.test(phone) ||
+    /^(\d)\1+$/.test(cleanPhone) ||
+    cleanPhone === '1234567890'
+  ) {
+    return 'Please provide a valid international phone number.';
   }
+}
   return null;
+}
+
+const ALLOWED_GUEST_FIELDS = ['firstName', 'lastName', 'email', 'phone', 'idDocument', 'loyaltyPoints', 'notes'];
+
+function filterGuestFields(input) {
+  const data = {};
+  for (const key of ALLOWED_GUEST_FIELDS) {
+    if (key in input) data[key] = input[key];
+  }
+  return data;
 }
 
 export async function createGuest(req, res) {
@@ -64,7 +85,8 @@ export async function createGuest(req, res) {
     const err = validateServerGuest(req.body);
     if (err) return res.status(400).json({ error: err });
 
-    const guest = await prisma.guest.create({ data: req.body });
+    const safeData = filterGuestFields(req.body);
+    const guest = await prisma.guest.create({ data: safeData });
     res.status(201).json(guest);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -76,7 +98,8 @@ export async function updateGuest(req, res) {
     const err = validateServerGuest(req.body);
     if (err) return res.status(400).json({ error: err });
 
-    const guest = await prisma.guest.update({ where: { id: Number(req.params.id) }, data: req.body });
+    const safeData = filterGuestFields(req.body);
+    const guest = await prisma.guest.update({ where: { id: Number(req.params.id) }, data: safeData });
     res.json(guest);
   } catch (err) {
     res.status(500).json({ error: err.message });

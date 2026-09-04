@@ -17,9 +17,13 @@ import { Button } from "@/components/ui/button";
 import { submitIdentity } from "@/lib/api-client";
 import { useCheckIn } from "./CheckInProvider";
 
+import { useTranslation } from "react-i18next";
+import "@/i18n";
+
 type VerifyResult = { status: "verified" | "failed"; score: number; errorReason?: string } | null;
 
 export function VerifyScreen() {
+  const { t } = useTranslation();
   const router = useRouter();
   const { token, setIdVerified } = useCheckIn();
 
@@ -132,18 +136,18 @@ export function VerifyScreen() {
     <ScreenShell
       stepIndex={1}
       onBack={() => router.push(`/checkin/${token}`)}
-      title="Verify your identity"
-      subtitle="Required for a secure, contactless check-in."
+      title={t("checkin.verifyIdentityTitle")}
+      subtitle={t("checkin.verifyIdentitySub")}
       footer={
         <Button onClick={() => router.push(`/checkin/${token}/payment`)} disabled={!canContinue}>
-          Continue <ArrowRight className="h-4 w-4" />
+          {t("common.next")} <ArrowRight className="h-4 w-4" />
         </Button>
       }
     >
       <div className="space-y-3 mt-1">
         <UploadCard
           icon={<Upload className="h-5 w-5" />}
-          title="Upload driver's license"
+          title={t("checkin.uploadDlTitle")}
           preview={idPreview}
           onSelect={(f) => handlePick(f, setIdFile, setIdPreview)}
           inputProps={{ accept: "image/*" }}
@@ -151,7 +155,7 @@ export function VerifyScreen() {
 
         <UploadCard
           icon={<Camera className="h-5 w-5" />}
-          title="Take a selfie"
+          title={t("checkin.takeSelfieTitle")}
           preview={selfiePreview}
           onSelect={(f) => handlePick(f, setSelfieFile, setSelfiePreview)}
           onOpenCamera={startCamera}
@@ -165,16 +169,16 @@ export function VerifyScreen() {
               <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
               <div className="flex-1">{error}</div>
             </div>
-            <Button onClick={runVerification} loading={verifying}>
-              <RefreshCw className="h-4 w-4" /> Retry verification
+            <Button onClick={runVerification} disabled={verifying}>
+              <RefreshCw className="h-4 w-4" /> {t("checkin.retryVerification")}
             </Button>
           </div>
         )}
 
         {!error && !result && hasFiles && (
           <div className="pt-1">
-            <Button onClick={runVerification} loading={verifying}>
-              {verifying ? <><Loader2 className="h-4 w-4 animate-spin" /> Verifying…</> : "Verify identity"}
+            <Button onClick={runVerification} disabled={verifying}>
+              {verifying ? <><Loader2 className="h-4 w-4 animate-spin" /> {t("checkin.verifyingId")}</> : t("checkin.verifyIdentityBtn")}
             </Button>
           </div>
         )}
@@ -182,7 +186,7 @@ export function VerifyScreen() {
         {result?.status === "verified" && (
           <div className="flex items-center gap-2.5 rounded-xl bg-emerald-50 text-emerald-700 px-4 py-3.5 animate-popIn">
             <CheckCircle2 className="h-5 w-5 shrink-0 text-emerald-600" />
-            <span className="text-[14px] font-medium text-emerald-800">Verification successful</span>
+            <span className="text-[14px] font-medium text-emerald-800">{t("checkin.verificationSuccessful")}</span>
             <span className="ml-auto text-[12px] font-semibold text-emerald-600/90">{result.score}% match</span>
           </div>
         )}
@@ -191,13 +195,13 @@ export function VerifyScreen() {
           <div className="rounded-xl bg-red-50 text-red-700 px-4 py-3.5 border border-red-100 animate-popIn">
             <div className="flex items-center gap-2.5">
               <AlertCircle className="h-5 w-5 shrink-0 text-red-600" />
-              <span className="text-[14px] font-semibold text-red-800">Verification failed — try again</span>
+              <span className="text-[14px] font-semibold text-red-800">{t("checkin.verificationFailedTryAgain")}</span>
               {result.score > 0 && (
                 <span className="ml-auto text-[12px] font-semibold text-red-600/90">{result.score}% match</span>
               )}
             </div>
             <p className="text-[12.5px] text-red-700/90 mt-1.5 pl-7 mb-3">
-              {result.errorReason || "Your selfie doesn't match your ID photo closely enough. Please upload matching photos and try again."}
+              {result.errorReason || t("checkin.verifyFailedRetry")}
             </p>
             <Button
               variant="outline"
@@ -208,7 +212,7 @@ export function VerifyScreen() {
                 setSelfiePreview(null);
               }}
             >
-              <RefreshCw className="h-4 w-4" /> Retake photo
+              <RefreshCw className="h-4 w-4" /> {t("checkin.retakePhoto")}
             </Button>
           </div>
         )}
@@ -219,7 +223,7 @@ export function VerifyScreen() {
         <div className="fixed inset-0 z-50 bg-slate-900/90 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="relative w-full max-w-md bg-slate-900 rounded-3xl overflow-hidden border border-slate-800 shadow-2xl">
             <div className="flex items-center justify-between px-5 py-4 border-b border-slate-800">
-              <h3 className="text-white font-medium text-base">Take a selfie</h3>
+              <h3 className="text-white font-medium text-base">{t("checkin.takeSelfieTitle")}</h3>
               <button
                 onClick={stopCamera}
                 className="text-slate-400 hover:text-white p-1 rounded-full bg-slate-800/80"
@@ -265,7 +269,7 @@ export function VerifyScreen() {
 
       <div className="mt-6 rounded-xl bg-slate-50 px-4 py-3">
         <p className="text-[12.5px] text-slate-400 leading-relaxed">
-          Your documents are encrypted in transit and used only to confirm your identity for this stay.
+          {t("checkin.encryptionInfo")}
         </p>
       </div>
     </ScreenShell>

@@ -64,7 +64,7 @@ export default function SettingsPage() {
             <p className="text-sm text-slate-500">Configure hotel preferences, OTA credentials, notifications, and sync behavior.</p>
           </div>
           <div className="flex flex-wrap gap-2">
-            <button onClick={handleSave} className="flex items-center gap-2 rounded-full bg-violet-600 px-3 py-2 text-sm font-medium text-white">
+            <button onClick={handleSave} className="flex items-center gap-2 rounded-full bg-blue-600 hover:bg-blue-700 px-3 py-2 text-sm font-medium text-white transition-colors">
               <FiSave size={14} /> Save
             </button>
             <button onClick={handleTestConnection} className="flex items-center gap-2 rounded-full border border-violet-200 px-3 py-2 text-sm font-medium text-slate-600">

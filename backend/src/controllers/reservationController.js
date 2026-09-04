@@ -1,7 +1,5 @@
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../utils/db.js';
 import { sendCheckInEmail } from '../utils/emailNotifier.js';
-
-const prisma = new PrismaClient();
 
 function paginate(data, page, limit) {
   const total = data.length;
@@ -110,11 +108,21 @@ export async function createReservation(req, res) {
     }
 
     if (phone) {
-      const cleanPhone = String(phone).replace(/\D/g, '');
-      if (cleanPhone.length !== 10 || !/^[6-9]\d{9}$/.test(cleanPhone) || /^(\d)\1{9}$/.test(cleanPhone) || cleanPhone === '1234567890') {
-        return res.status(400).json({ error: 'Please provide a valid 10-digit mobile phone number.' });
-      }
-    }
+  const phoneNumber = String(phone).trim();
+  const cleanPhone = phoneNumber.replace(/\D/g, '');
+
+  const internationalPhoneRegex = /^\+?[1-9]\d{9,14}$/;
+
+  if (
+    !internationalPhoneRegex.test(phoneNumber) ||
+    /^(\d)\1+$/.test(cleanPhone) ||
+    cleanPhone === '1234567890'
+  ) {
+    return res.status(400).json({
+      error: 'Please provide a valid international phone number.'
+    });
+  }
+}
 
     let finalGuestId = guestId ? Number(guestId) : null;
 
@@ -218,8 +226,15 @@ export async function createReservation(req, res) {
 
 export async function updateReservation(req, res) {
   try {
-    const { checkIn, checkOut, firstName, lastName, email, phone, guestId, roomId, ...rest } = req.body;
-    const updateData = { ...rest };
+    const { checkIn, checkOut, firstName, lastName, email, phone, guestId, roomId } = req.body;
+    const ALLOWED_RESERVATION_FIELDS = ['status', 'totalCharges', 'paidAmount', 'source', 'notes'];
+    const updateData = {};
+
+    for (const field of ALLOWED_RESERVATION_FIELDS) {
+      if (field in req.body) {
+        updateData[field] = req.body[field];
+      }
+    }
 
     if (checkIn !== undefined) {
       const parsed = new Date(checkIn);

@@ -10,7 +10,11 @@ import { completeCheckIn } from "@/lib/api-client";
 import { RESERVATION } from "@/lib/mock-data";
 import { useCheckIn } from "./CheckInProvider";
 
+import { useTranslation } from "react-i18next";
+import "@/i18n";
+
 export function ReviewScreen() {
+  const { t } = useTranslation();
   const router = useRouter();
   const { token, paymentAuthorized, setCheckedIn } = useCheckIn();
   const [agreed, setAgreed] = useState(false);
@@ -33,37 +37,35 @@ export function ReviewScreen() {
     <ScreenShell
       stepIndex={3}
       onBack={() => router.push(`/checkin/${token}/payment`)}
-      title="Review & complete"
-      subtitle="Double-check the details before we assign your room."
+      title={t("checkin.reviewTitle")}
+      subtitle={t("checkin.reviewSub")}
       footer={
-        <Button onClick={complete} disabled={!agreed} loading={submitting}>
-          Complete check-in
+        <Button onClick={complete} disabled={!agreed || submitting}>
+          {t("checkin.completeCheckInBtn")}
         </Button>
       }
     >
       <div className="rounded-2xl border border-slate-100 divide-y divide-slate-100 mb-4">
-        <Row icon={<Users className="h-4 w-4" />} label="Guest" value={RESERVATION.guestName} />
-        <Row icon={<BedDouble className="h-4 w-4" />} label="Room type" value={RESERVATION.roomType} />
-        <Row icon={<CalendarDays className="h-4 w-4" />} label="Arrival" value={RESERVATION.checkIn} />
+        <Row icon={<Users className="h-4 w-4" />} label={t("reservations.guestName")} value={RESERVATION.guestName} />
+        <Row icon={<BedDouble className="h-4 w-4" />} label={t("checkin.roomType")} value={RESERVATION.roomType} />
+        <Row icon={<CalendarDays className="h-4 w-4" />} label={t("checkin.checkInDate")} value={RESERVATION.checkIn} />
       </div>
 
       <div className="grid grid-cols-2 gap-3 mb-4">
-        <StatusPill label="Identity" value="Verified" />
-        <StatusPill label="Payment" value={paymentAuthorized ? "Authorized" : "Pending"} />
+        <StatusPill label={t("checkin.step1Title")} value={t("checkin.identityVerified")} />
+        <StatusPill label={t("checkin.step2Title")} value={paymentAuthorized ? t("checkin.identityVerified") : t("common.pending", "Pending")} />
       </div>
 
       <div className="rounded-2xl bg-slate-50 p-4 mb-5">
-        <p className="text-[13px] font-medium text-slate-600 mb-1.5">Motel policies</p>
+        <p className="text-[13px] font-medium text-slate-600 mb-1.5">{t("checkin.motelPolicies")}</p>
         <p className="text-[12.5px] text-slate-400 leading-relaxed">
-          Quiet hours 10pm–8am. No smoking in rooms. Maximum {RESERVATION.guests} guests per room.
-          A valid ID may be requested at any time during your stay. Late checkout after 11am
-          incurs a half-day rate.
+          {t("checkin.policyBody", { guests: RESERVATION.guests })}
         </p>
       </div>
 
       <label className="flex items-start gap-3 cursor-pointer select-none">
         <Checkbox checked={agreed} onCheckedChange={(v) => setAgreed(v === true)} className="mt-0.5" />
-        <span className="text-[13.5px] text-slate-600">I agree to the motel policies above.</span>
+        <span className="text-[13.5px] text-slate-600">{t("checkin.agreePolicy")}</span>
       </label>
     </ScreenShell>
   );

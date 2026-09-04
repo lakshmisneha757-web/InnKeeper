@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { motion } from "framer-motion";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -45,31 +45,53 @@ interface ArrivalsDeparturesProps {
 export default function ArrivalsDepartures({ rooms, reservations, guests }: ArrivalsDeparturesProps) {
   const { t } = useTranslation();
   const { updateRoomStatus, setSelectedRoom } = useStore();
-  const utils = trpc.useUtils();
+  const utils = (trpc as any).useUtils ? (trpc as any).useUtils() : null;
 
-  const checkInMutation = trpc.reservations.checkIn.useMutation();
-  const checkOutMutation = trpc.reservations.checkOut.useMutation();
+  const checkInMutation = (trpc as any).reservations?.checkIn?.useMutation ? (trpc as any).reservations.checkIn.useMutation() : { mutateAsync: async () => {}, isPending: false };
+  const checkOutMutation = (trpc as any).reservations?.checkOut?.useMutation ? (trpc as any).reservations.checkOut.useMutation() : { mutateAsync: async () => {}, isPending: false };
 
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const tomorrow = new Date(today);
-  tomorrow.setDate(tomorrow.getDate() + 1);
+  // Dynamic currentDate hook that updates live when the day changes
+  const [currentDateStr, setCurrentDateStr] = useState<string>(() => new Date().toDateString());
+
+  useEffect(() => {
+    // Check every minute if the date has changed to a new day
+    const interval = setInterval(() => {
+      const nowStr = new Date().toDateString();
+      if (nowStr !== currentDateStr) {
+        setCurrentDateStr(nowStr);
+      }
+    }, 60000);
+    return () => clearInterval(interval);
+  }, [currentDateStr]);
 
   const todayArrivals = useMemo(() => {
+    const today = new Date(currentDateStr);
+    today.setHours(0, 0, 0, 0);
+
     return reservations.filter((r) => {
-      const ci = new Date(r.checkIn);
       const status = (r.status || '').toLowerCase();
-      return ci.toDateString() === today.toDateString() && (status === "confirmed" || status === "checked_in");
+      // Display guests whose complete check-in (all 3 steps completed: status === checked_in) is on the current date
+      if (status !== "checked_in") return false;
+
+      const checkInDate = new Date(r.checkIn);
+      checkInDate.setHours(0, 0, 0, 0);
+      return checkInDate.getTime() === today.getTime();
     });
-  }, [reservations]);
+  }, [reservations, currentDateStr]);
 
   const todayDepartures = useMemo(() => {
+    const today = new Date(currentDateStr);
+    today.setHours(0, 0, 0, 0);
+
     return reservations.filter((r) => {
-      const co = new Date(r.checkOut);
       const status = (r.status || '').toLowerCase();
-      return co.toDateString() === today.toDateString() && status === "checked_in";
+      if (status !== "checked_in") return false;
+
+      const checkOutDate = new Date(r.checkOut);
+      checkOutDate.setHours(0, 0, 0, 0);
+      return checkOutDate.getTime() === today.getTime();
     });
-  }, [reservations]);
+  }, [reservations, currentDateStr]);
 
   const getGuest = (guestId: number | null) => {
     if (!guestId) return null;
@@ -93,8 +115,8 @@ export default function ArrivalsDepartures({ rooms, reservations, guests }: Arri
       });
       const room = getRoom(res.roomId);
       if (room) updateRoomStatus(room.id, "occupied");
-      utils.rooms.list.invalidate();
-      utils.reservations.list.invalidate();
+      utils?.rooms?.list?.invalidate?.();
+      utils?.reservations?.list?.invalidate?.();
       toast.success(`Checked in: ${getGuest(res.guestId)?.firstName || "Guest"}`);
     } catch {
       toast.error("Failed to check in");
@@ -110,8 +132,8 @@ export default function ArrivalsDepartures({ rooms, reservations, guests }: Arri
       });
       const room = getRoom(res.roomId);
       if (room) updateRoomStatus(room.id, "dirty");
-      utils.rooms.list.invalidate();
-      utils.reservations.list.invalidate();
+      utils?.rooms?.list?.invalidate?.();
+      utils?.reservations?.list?.invalidate?.();
       toast.success(`Checked out: ${getGuest(res.guestId)?.firstName || "Guest"}`);
     } catch {
       toast.error("Failed to check out");

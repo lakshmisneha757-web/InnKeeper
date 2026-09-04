@@ -211,24 +211,24 @@ export default function BookingSyncPage() {
       <div className="rounded-[24px] border border-violet-100 bg-white/80 p-4 shadow-sm backdrop-blur">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex flex-wrap gap-2">
-            <button onClick={() => handleAction('sync')} className="flex items-center gap-2 rounded-full bg-violet-600 px-3 py-2 text-sm font-medium text-white">
+            <button onClick={() => handleAction('sync')} className="flex items-center gap-2 rounded-full bg-blue-600 hover:bg-blue-700 px-3 py-2 text-sm font-medium text-white transition-colors">
               <FiZap size={14} /> Sync All Channels
             </button>
-            <button onClick={() => handleAction('retry')} className="flex items-center gap-2 rounded-full border border-violet-200 px-3 py-2 text-sm font-medium text-slate-600">
+            <button onClick={() => handleAction('retry')} className="flex items-center gap-2 rounded-full border border-blue-200 bg-white hover:bg-blue-50 px-3 py-2 text-sm font-medium text-blue-700 transition-colors">
               <FiRefreshCw size={14} /> Retry Failed Sync
             </button>
-            <button onClick={() => handleAction('refresh')} className="flex items-center gap-2 rounded-full border border-violet-200 px-3 py-2 text-sm font-medium text-slate-600">
+            <button onClick={() => handleAction('refresh')} className="flex items-center gap-2 rounded-full border border-blue-200 bg-white hover:bg-blue-50 px-3 py-2 text-sm font-medium text-blue-700 transition-colors">
               <FiRefreshCw size={14} /> Refresh Status
             </button>
           </div>
           <div className="flex flex-col gap-2 sm:flex-row">
-            <select value={channelFilter} onChange={(e) => setChannelFilter(e.target.value)} className="rounded-2xl border border-violet-100 bg-violet-50 px-3 py-2 text-sm">
+            <select value={channelFilter} onChange={(e) => setChannelFilter(e.target.value)} className="rounded-2xl border border-blue-100 bg-blue-50/50 px-3 py-2 text-sm">
               {channelOptions.map((option) => <option key={option} value={option}>{option === 'All' ? 'OTA Channel' : option}</option>)}
             </select>
-            <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="rounded-2xl border border-violet-100 bg-violet-50 px-3 py-2 text-sm">
+            <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="rounded-2xl border border-blue-100 bg-blue-50/50 px-3 py-2 text-sm">
               {statusOptions.map((option) => <option key={option} value={option}>{option === 'All' ? 'Sync Status' : option}</option>)}
             </select>
-            <label className="flex items-center gap-2 rounded-2xl border border-violet-100 bg-violet-50 px-3 py-2 text-sm text-slate-500">
+            <label className="flex items-center gap-2 rounded-2xl border border-blue-100 bg-blue-50/50 px-3 py-2 text-sm text-slate-500">
               <FiSearch size={14} />
               <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search booking or guest" className="w-44 bg-transparent outline-none" />
             </label>
@@ -238,10 +238,10 @@ export default function BookingSyncPage() {
 
       {error ? <div className="rounded-[24px] border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">{error}</div> : null}
 
-      <div className="overflow-hidden rounded-[24px] border border-violet-100 bg-white/80 shadow-sm backdrop-blur">
+      <div className="overflow-hidden rounded-[24px] border border-blue-100 bg-white/80 shadow-sm backdrop-blur">
         <div className="overflow-x-auto">
           <table className="min-w-full text-left text-sm">
-            <thead className="bg-violet-50 text-slate-600">
+            <thead className="bg-blue-50/60 text-slate-600">
               <tr>
                 <th className="px-4 py-3">Booking ID</th>
                 <th className="px-4 py-3">Guest Name</th>
@@ -257,7 +257,7 @@ export default function BookingSyncPage() {
             </thead>
             <tbody>
               {filteredRows.length ? filteredRows.map((row) => (
-                <tr key={row.bookingId} className="border-t border-violet-100 bg-white">
+                <tr key={row.bookingId} className="border-t border-blue-100 bg-white">
                   <td className="px-4 py-3 font-medium">{row.bookingId}</td>
                   <td className="px-4 py-3">{row.guestName}</td>
                   <td className="px-4 py-3">{row.otaChannel}</td>
@@ -273,8 +273,8 @@ export default function BookingSyncPage() {
                   <td className="px-4 py-3">{formatDate(row.lastSyncTime)}</td>
                   <td className="px-4 py-3">
                     <div className="flex flex-wrap gap-2">
-                      <button className="rounded-full border border-violet-200 px-2.5 py-1 text-xs font-medium text-slate-600">View</button>
-                      <button onClick={() => handleRetryRow(row)} className="rounded-full bg-violet-600 px-2.5 py-1 text-xs font-medium text-white">Retry Sync</button>
+                      <button className="rounded-full border border-blue-200 px-2.5 py-1 text-xs font-medium text-blue-700 hover:bg-blue-50">View</button>
+                      <button onClick={() => handleRetryRow(row)} className="rounded-full bg-blue-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-blue-700">Retry Sync</button>
                     </div>
                   </td>
                 </tr>

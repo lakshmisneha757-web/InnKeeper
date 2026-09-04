@@ -1,5 +1,4 @@
-import { PrismaClient } from '@prisma/client';
-const prisma = new PrismaClient();
+import { prisma } from '../utils/db.js';
 
 function paginate(data, page, limit) {
   const total = data.length;
@@ -108,10 +107,12 @@ export async function updateRoomNew(req, res) {
           }
         });
         for (const r of confirmedRes) {
-          await prisma.reservation.update({
-            where: { id: r.id },
-            data: { status: 'checked_in', verificationStatus: 'VERIFIED' }
-          });
+          if (r.verificationStatus === 'VERIFIED') {
+            await prisma.reservation.update({
+              where: { id: r.id },
+              data: { status: 'checked_in' }
+            });
+          }
         }
       }
     }
@@ -124,9 +125,136 @@ export async function updateRoomNew(req, res) {
 
 export async function deleteRoomNew(req, res) {
   try {
-    await prisma.room.delete({ where: { id: Number(req.params.id) } });
+    const roomId = Number(req.params.id);
+    const activeBookings = await prisma.reservation.findMany({
+      where: {
+        roomId,
+        status: { in: ['confirmed', 'checked_in'] }
+      }
+    });
+
+    if (activeBookings.length > 0) {
+      return res.status(400).json({ error: `Cannot delete room #${roomId}: ${activeBookings.length} active reservation(s) exist. Please relocate or check out guests first.` });
+    }
+
+    await prisma.room.delete({ where: { id: roomId } });
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
+  }
+}
+// ─── Housekeeping Room Status Actions ─────────────────────
+
+export async function startCleaning(req, res) {
+  try {
+    const roomId = Number(req.params.id);
+
+    const room = await prisma.room.update({
+      where: { id: roomId },
+      data: {
+        status: 'CLEANING_IN_PROGRESS',
+        last_updated: new Date(),
+      },
+    });
+
+    res.json({
+      success: true,
+      data: {
+        ...room,
+        roomNumber: room.room_number,
+      },
+    });
+  } catch (err) {
+    console.error('Failed to start cleaning:', err);
+    res.status(500).json({
+      success: false,
+      error: err.message,
+    });
+  }
+}
+
+export async function markRoomClean(req, res) {
+  try {
+    const roomId = Number(req.params.id);
+    const { notes } = req.body;
+
+    const room = await prisma.room.update({
+      where: { id: roomId },
+      data: {
+        status: 'CLEAN',
+        last_updated: new Date(),
+      },
+    });
+
+    res.json({
+      success: true,
+      data: {
+        ...room,
+        roomNumber: room.room_number,
+        cleaningNotes: notes || null,
+      },
+    });
+  } catch (err) {
+    console.error('Failed to mark room clean:', err);
+    res.status(500).json({
+      success: false,
+      error: err.message,
+    });
+  }
+}
+
+export async function markRoomDirty(req, res) {
+  try {
+    const roomId = Number(req.params.id);
+
+    const room = await prisma.room.update({
+      where: { id: roomId },
+      data: {
+        status: 'DIRTY',
+        last_updated: new Date(),
+      },
+    });
+
+    res.json({
+      success: true,
+      data: {
+        ...room,
+        roomNumber: room.room_number,
+      },
+    });
+  } catch (err) {
+    console.error('Failed to mark room dirty:', err);
+    res.status(500).json({
+      success: false,
+      error: err.message,
+    });
+  }
+}
+
+export async function markRoomInspected(req, res) {
+  try {
+    const roomId = Number(req.params.id);
+
+    const room = await prisma.room.update({
+      where: { id: roomId },
+      data: {
+        status: 'CLEAN',
+        last_updated: new Date(),
+      },
+    });
+
+    res.json({
+      success: true,
+      data: {
+        ...room,
+        roomNumber: room.room_number,
+      },
+    });
+  } catch (err) {
+    console.error('Failed to mark room inspected:', err);
+    res.status(500).json({
+      success: false,
+      error: err.message,
+    });
   }
 }

@@ -115,7 +115,15 @@ export default function PaymentsPage() {
                   const statusStr = (p.status ?? p.paymentStatus ?? "").toString().toLowerCase();
                   const isCompletedOrPaid = statusStr === "completed" || statusStr === "paid";
                   const displayGuest = isCompletedOrPaid && rawGuest ? rawGuest : "—";
-                  const displayStatus = isCompletedOrPaid ? "Paid" : (p.status ?? p.paymentStatus ?? "—");
+                  const displayStatus = isCompletedOrPaid 
+                    ? t("payments.paid", "Paid") 
+                    : statusStr === "pending"
+                      ? t("payments.pending", "Pending")
+                      : statusStr === "refunded"
+                        ? t("payments.refunded", "Refunded")
+                        : statusStr === "failed"
+                          ? t("payments.failed", "Failed")
+                          : (p.status ?? p.paymentStatus ?? "—");
 
                   const totalItems = paymentsQ.data?.items?.length || 1;
                   const displayPayId = `PAY-${String(totalItems - idx).padStart(4, '0')}`;
@@ -130,7 +138,13 @@ export default function PaymentsPage() {
                       <TableCell className="font-semibold text-foreground">₹{(p.amount ?? 0).toLocaleString()}</TableCell>
                       <TableCell>{p.method ?? "—"}</TableCell>
                       <TableCell>
-                        <span className="inline-flex items-center rounded-full bg-emerald-500/10 px-2.5 py-0.5 text-xs font-medium text-emerald-600 border border-emerald-500/20">
+                        <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium border ${
+                          isCompletedOrPaid 
+                            ? "bg-emerald-500/10 text-emerald-600 border-emerald-500/20" 
+                            : statusStr === "pending"
+                              ? "bg-amber-500/10 text-amber-600 border-amber-500/20"
+                              : "bg-slate-500/10 text-slate-600 border-slate-500/20"
+                        }`}>
                           {displayStatus}
                         </span>
                       </TableCell>

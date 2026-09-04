@@ -3,7 +3,8 @@ import crypto from 'crypto';
 export class LockService {
   generateDigitalKeyPayload(reservationId, lockId, validFrom, validUntil) {
     const plaintextKey = crypto.randomBytes(32).toString('hex');
-    const keyMaterial = crypto.scryptSync(`${reservationId}:${lockId}:innkeeper`, 'checkin-salt', 32);
+    const salt = crypto.randomBytes(16);
+    const keyMaterial = crypto.scryptSync(`${reservationId}:${lockId}:innkeeper`, salt, 32);
     const derivedKey = new Uint8Array(keyMaterial);
     const iv = new Uint8Array(crypto.randomBytes(12));
     const plaintextBytes = new TextEncoder().encode(plaintextKey);
@@ -26,7 +27,7 @@ export class LockService {
       encryptedKey: Buffer.from(encryptedBytes).toString('base64'),
       nonce: Buffer.from(iv).toString('base64'),
       authTag: Buffer.from(authTagBytes).toString('base64'),
-      plaintextKey,
+      salt: salt.toString('base64'),
       validFrom,
       validUntil,
     };
