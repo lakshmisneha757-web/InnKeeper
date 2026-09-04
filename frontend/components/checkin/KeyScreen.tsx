@@ -9,7 +9,11 @@ import { RESERVATION } from "@/lib/mock-data";
 import { LOCK_STAGES, RELOCK_AFTER_MS, runUnlockSequence, type LockStage } from "@/lib/lock-sequence";
 import { useCheckIn } from "./CheckInProvider";
 
+import { useTranslation } from "react-i18next";
+import "@/i18n";
+
 export function KeyScreen() {
+  const { t } = useTranslation();
   const router = useRouter();
   const { token } = useCheckIn();
   const [stage, setStage] = useState<LockStage>("idle");
@@ -58,7 +62,7 @@ export function KeyScreen() {
               <p className="text-[11px] uppercase tracking-wider text-blue-200 font-medium">
                 {RESERVATION.hotelName}
               </p>
-              <p className="text-[12px] text-blue-100 mt-0.5">Digital room key</p>
+              <p className="text-[12px] text-blue-100 mt-0.5">{t("checkin.digitalRoomKey")}</p>
             </div>
             <div className="h-8 w-11 rounded-md bg-white/15 border border-white/20 flex items-center justify-center">
               <div className="h-4 w-6 rounded-sm bg-gradient-to-br from-yellow-200 to-yellow-500 opacity-80" />
@@ -67,13 +71,13 @@ export function KeyScreen() {
 
           <div className="relative flex items-end justify-between">
             <div>
-              <p className="text-[11px] text-blue-200">Room</p>
+              <p className="text-[11px] text-blue-200">{t("checkin.roomType")}</p>
               <p className="text-[40px] leading-none font-semibold tracking-tight">
                 {RESERVATION.roomNumber}
               </p>
             </div>
             <div className="text-right">
-              <p className="text-[11px] text-blue-200">Valid until</p>
+              <p className="text-[11px] text-blue-200">{t("checkin.validForStay")}</p>
               <p className="text-[13px] font-medium">{RESERVATION.checkoutTime}</p>
             </div>
           </div>
@@ -82,14 +86,14 @@ export function KeyScreen() {
         <div className="flex items-center justify-between mt-4 mb-6 px-1">
           <div className="flex items-center gap-1.5 text-[12.5px] text-slate-500">
             <Bluetooth className={`h-3.5 w-3.5 ${keyLoaded ? "text-blue-500" : "text-slate-300"}`} />
-            {keyLoaded ? "Digital key ready" : "Loading key…"}
+            {keyLoaded ? t("checkin.digitalKeyReady") : t("checkin.loadingKey")}
           </div>
           <button
             type="button"
             onClick={() => setShowQr((value) => !value)}
             className="flex items-center gap-1.5 text-[12.5px] text-slate-400 hover:text-slate-600"
           >
-            <QrCode className="h-3.5 w-3.5" /> {showQr ? "Show key card" : "Show QR instead"}
+            <QrCode className="h-3.5 w-3.5" /> {showQr ? t("checkin.showKeyCard") : t("checkin.showQrInstead")}
           </button>
         </div>
 
@@ -110,7 +114,7 @@ export function KeyScreen() {
               <div className="mt-4 text-center">
                 <p className="text-[13.5px] font-semibold text-slate-800">Room {RESERVATION.roomNumber} Key QR Code</p>
                 <p className="mt-1 text-[12px] text-slate-500 max-w-[260px] mx-auto">
-                  Hold this QR code near the optical door scanner to gain entry.
+                  {t("checkin.scanNFC")}
                 </p>
               </div>
             </div>
@@ -129,21 +133,21 @@ export function KeyScreen() {
                 {stage === "idle" && (
                   <>
                     <Lock className="h-9 w-9 text-blue-600" />
-                    <span className="text-[13.5px] font-semibold text-blue-600">Tap to unlock</span>
+                    <span className="text-[13.5px] font-semibold text-blue-600">{t("checkin.tapToUnlock")}</span>
                   </>
                 )}
                 {isRunning && (
                   <>
                     <Loader2 className="h-9 w-9 text-blue-600 animate-spin" />
                     <span className="text-[12.5px] font-semibold text-blue-600 text-center px-4 leading-tight">
-                      {LOCK_STAGES[activeStageIndex]?.label ?? "Working…"}
+                      {LOCK_STAGES[activeStageIndex]?.label ?? t("common.loading")}
                     </span>
                   </>
                 )}
                 {stage === "unlocked" && (
                   <>
                     <Unlock className="h-9 w-9 text-emerald-600 animate-popIn" />
-                    <span className="text-[13.5px] font-semibold text-emerald-600">Door unlocked</span>
+                    <span className="text-[13.5px] font-semibold text-emerald-600">{t("checkin.doorUnlocked")}</span>
                   </>
                 )}
               </button>
@@ -185,10 +189,10 @@ export function KeyScreen() {
 
               <p className="text-[12px] text-slate-400 mt-4 text-center max-w-[240px]">
                 {stage === "unlocked"
-                  ? "Door is open. It will relock automatically in a few seconds."
+                  ? t("checkin.doorOpenRelockInfo")
                   : isRunning
-                  ? "Stay near the door while your key connects."
-                  : "Tap the icon while standing near your door."}
+                  ? t("checkin.stayNearDoor")
+                  : t("checkin.tapIconNearDoor")}
               </p>
             </>
           )}

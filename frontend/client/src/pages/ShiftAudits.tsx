@@ -72,10 +72,18 @@ export default function ShiftAuditsPage() {
                     <TableCell>₹{r.openingCash}</TableCell>
                     <TableCell>₹{r.closingCash}</TableCell>
                     <TableCell>₹{r.difference}</TableCell>
-                    <TableCell className="capitalize">{r.status}</TableCell>
+                    <TableCell>
+                      <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium border ${
+                        (r.status || '').toLowerCase() === 'open' 
+                          ? 'bg-blue-500/10 text-blue-600 border-blue-500/20' 
+                          : 'bg-slate-500/10 text-slate-600 border-slate-500/20'
+                      }`}>
+                        {(r.status || '').toLowerCase() === 'open' ? t("common.open", "Open") : t("common.closed", "Closed")}
+                      </span>
+                    </TableCell>
                     <TableCell className="flex gap-2">
-                      <Button size="sm" className="cursor-pointer" onClick={()=>{ setEditing(r); form.reset({ employeeName: r.employeeName, openingCash: r.openingCash ?? 0, closingCash: r.closingCash ?? 0, status: r.status ?? "open", notes: r.notes ?? "" }); setDialogOpen(true); }}>{t("common.edit")}</Button>
-                      <Button size="sm" variant="destructive" className="cursor-pointer" onClick={()=>{ if(!window.confirm("Delete audit?")) return; remove.mutate(r.id); }}>{t("common.delete")}</Button>
+                      <Button size="sm" className="cursor-pointer min-w-[65px]" onClick={()=>{ setEditing(r); form.reset({ employeeName: r.employeeName, openingCash: r.openingCash ?? 0, closingCash: r.closingCash ?? 0, status: r.status ?? "open", notes: r.notes ?? "" }); setDialogOpen(true); }}>{t("common.edit")}</Button>
+                      <Button size="sm" variant="destructive" className="cursor-pointer min-w-[65px]" onClick={()=>{ if(!window.confirm("Delete audit?")) return; remove.mutate(r.id); }}>{t("common.delete")}</Button>
                     </TableCell>
                   </TableRow>
                 ))}

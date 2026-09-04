@@ -164,7 +164,7 @@ export default function ReportsPage() {
           </div>
           <div className="flex flex-wrap gap-2">
             {periodOptions.map((option) => (
-              <button key={option} onClick={() => setPeriod(option)} className={`rounded-full px-3 py-2 text-sm font-medium ${period === option ? 'bg-violet-600 text-white' : 'border border-violet-200 bg-white text-slate-600'}`}>
+              <button key={option} onClick={() => setPeriod(option)} className={`rounded-full px-3 py-2 text-sm font-medium transition-colors ${period === option ? 'bg-blue-600 text-white' : 'border border-blue-200 bg-white text-slate-600 hover:bg-blue-50'}`}>
                 {option.charAt(0).toUpperCase() + option.slice(1)}
               </button>
             ))}

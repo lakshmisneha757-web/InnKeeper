@@ -32,5 +32,35 @@ export const getPricingHistory = () => api.get('/module2/pricing-history');
 export const getSyncLogs = () => api.get('/module2/sync-logs');
 export const getStatistics = () => api.get('/module2/statistics');
 export const getOccupancyHistory = () => api.get('/module2/occupancy-history');
+// InnKeeper application APIs
 
+export const fetchRooms = () => api.get('/rooms');
+
+export const fetchMaintenance = () => api.get('/maintenance');
+
+export const fetchNotifications = () => api.get('/notifications');
+
+export const startRoomCleaning = (roomId) =>
+  api.put(`/rooms/${roomId}/start`);
+
+export const markRoomClean = (roomId, notes) =>
+  api.put(`/rooms/${roomId}/clean`, { notes });
+
+export const markRoomDirty = (roomId) =>
+  api.put(`/rooms/${roomId}/dirty`);
+
+export const markRoomInspected = (roomId) =>
+  api.put(`/rooms/${roomId}/inspect`);
+
+export const createMaintenanceIssue = (payload) =>
+  api.post('/maintenance', payload);
+
+export const updateMaintenanceTicket = (ticketId, payload) =>
+  api.put(`/maintenance/${ticketId}`, payload);
+
+export const markNotificationAsRead = (id) =>
+  api.put('/notifications', { id });
+
+export const clearNotifications = () =>
+  api.delete('/notifications');
 export default api;

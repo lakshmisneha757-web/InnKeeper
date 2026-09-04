@@ -60,7 +60,7 @@ export default function Layout({ isLoggedIn, setIsLoggedIn }) {
               <p className="text-xs uppercase tracking-[0.3em] text-slate-400">Welcome Back</p>
               <h2 className="text-lg font-semibold text-slate-800">{currentUser.fullName || 'Motel Admin'} Console</h2>
             </div>
-            <button onClick={handleLogout} className="rounded-full bg-violet-600 px-4 py-2 text-sm font-medium text-white hover:bg-violet-700 transition">Logout</button>
+            <button onClick={handleLogout} className="rounded-full bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 transition">Logout</button>
           </div>
           <div className="rounded-[22px] border border-violet-100 bg-white/60 p-3 shadow-sm backdrop-blur sm:p-4">
             <Outlet />
