@@ -12,7 +12,7 @@ export async function listReservations(req, res) {
   try {
     const { page = 1, limit = 50, q = '' } = req.query;
     const [reservations, rooms] = await Promise.all([
-      prisma.reservation.findMany({ include: { guest: true }, orderBy: { id: 'desc' } }),
+      prisma.reservation.findMany({ include: { guest: true, payments: true }, orderBy: { id: 'desc' } }),
       prisma.room.findMany()
     ]);
 
@@ -271,7 +271,7 @@ export async function updateReservation(req, res) {
     const reservation = await prisma.reservation.update({
       where: { id: Number(req.params.id) },
       data: updateData,
-      include: { guest: true }
+      include: { guest: true, payments: true }
     });
 
     if (updateData.status === 'checked_out' && reservation.roomId) {

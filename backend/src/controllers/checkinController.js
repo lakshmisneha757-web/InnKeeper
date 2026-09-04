@@ -321,7 +321,7 @@ export async function processCheckInPayment(req, res) {
       data: {
         paidAmount: paymentAmount,
       },
-      include: { guest: true }
+      include: { guest: true, payments: true }
     });
 
     // Update room status to occupied if room is assigned

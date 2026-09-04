@@ -187,11 +187,20 @@ export default function CheckInVerification() {
       }
     }
 
-    // If currently on Step 1 and ID verification is already verified, proceed to Step 2 (Payment Process)
-    if (step === 1 && selectedReservation?.verificationStatus === 'VERIFIED' && !isSelectedGuestCheckedIn) {
+    // Determine if payment is already completed for this reservation (via paidAmount or payments status)
+    const hasPaid =
+      (selectedReservation?.paidAmount != null && Number(selectedReservation.paidAmount) > 0) ||
+      (Array.isArray(selectedReservation?.payments) &&
+        selectedReservation.payments.some(
+          (p: any) => (p.paymentStatus || p.status || '').toLowerCase() === 'paid'
+        ));
+
+    if (isSelectedGuestCheckedIn || (selectedReservation?.verificationStatus === 'VERIFIED' && hasPaid)) {
+      setStep(3);
+    } else if (selectedReservation?.verificationStatus === 'VERIFIED') {
       setStep(2);
     }
-  }, [selectedResId, selectedReservation, isSelectedGuestCheckedIn, step]);
+  }, [selectedResId, selectedReservation, isSelectedGuestCheckedIn]);
 
   // Handle Room Booking with Payment Gateway Details
   const handleCreateBookingWithPayment = async (e: React.FormEvent) => {
@@ -617,7 +626,10 @@ export default function CheckInVerification() {
                 const targetId = e.target.value;
                 setSelectedResId(targetId);
                 const target = reservations.find((r) => String(r.id) === String(targetId));
-                if (target && target.verificationStatus === 'VERIFIED' && !(target.status || '').toLowerCase().includes('check')) {
+                const isTargetCheckedIn = Boolean(target && (target.status || '').toLowerCase().includes('check'));
+                if (isTargetCheckedIn) {
+                  setStep(3);
+                } else if (target && target.verificationStatus === 'VERIFIED') {
                   setStep(2);
                 } else {
                   setStep(1);
@@ -654,7 +666,7 @@ export default function CheckInVerification() {
         </div>
 
         {selectedReservation ? (
-          isSelectedGuestCheckedIn && step !== 3 ? (
+          isSelectedGuestCheckedIn ? (
             <div className="pt-4">
               <div className="bg-card border border-border rounded-3xl p-8 shadow-xl text-center max-w-md mx-auto space-y-4 animate-in fade-in zoom-in duration-300">
                 <div className="w-16 h-16 rounded-full bg-blue-600 text-white flex items-center justify-center mx-auto shadow-lg shadow-blue-500/30">
@@ -710,8 +722,8 @@ export default function CheckInVerification() {
 
 
 
-      {/* Conditionally Render Workflow Steps ONLY when a Candidate is selected and (NOT already checked in OR in step 3 key generation) and NOT cancelled */}
-      {selectedResId && (!isSelectedGuestCheckedIn || step === 3) && !isSelectedGuestCancelled && (
+      {/* Conditionally Render Workflow Steps ONLY when a Candidate is selected and NOT already checked in and NOT cancelled */}
+      {selectedResId && !isSelectedGuestCheckedIn && !isSelectedGuestCancelled && (
         <>
           {/* STEP 1: ID Verification */}
           {step === 1 && (
