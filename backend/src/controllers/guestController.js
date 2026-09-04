@@ -1,5 +1,4 @@
-import { PrismaClient } from '@prisma/client';
-const prisma = new PrismaClient();
+import { prisma } from '../utils/db.js';
 
 function paginate(data, page, limit) {
   const total = data.length;
@@ -71,12 +70,23 @@ function validateServerGuest(data) {
   return null;
 }
 
+const ALLOWED_GUEST_FIELDS = ['firstName', 'lastName', 'email', 'phone', 'idDocument', 'loyaltyPoints', 'notes'];
+
+function filterGuestFields(input) {
+  const data = {};
+  for (const key of ALLOWED_GUEST_FIELDS) {
+    if (key in input) data[key] = input[key];
+  }
+  return data;
+}
+
 export async function createGuest(req, res) {
   try {
     const err = validateServerGuest(req.body);
     if (err) return res.status(400).json({ error: err });
 
-    const guest = await prisma.guest.create({ data: req.body });
+    const safeData = filterGuestFields(req.body);
+    const guest = await prisma.guest.create({ data: safeData });
     res.status(201).json(guest);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -88,7 +98,8 @@ export async function updateGuest(req, res) {
     const err = validateServerGuest(req.body);
     if (err) return res.status(400).json({ error: err });
 
-    const guest = await prisma.guest.update({ where: { id: Number(req.params.id) }, data: req.body });
+    const safeData = filterGuestFields(req.body);
+    const guest = await prisma.guest.update({ where: { id: Number(req.params.id) }, data: safeData });
     res.json(guest);
   } catch (err) {
     res.status(500).json({ error: err.message });

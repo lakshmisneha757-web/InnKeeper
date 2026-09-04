@@ -2,7 +2,7 @@
  * Role-Based Access Control (RBAC) Middleware
  * Verifies that the authenticated user has one of the required roles.
  */
-function requireRole(...allowedRoles) {
+export function requireRole(...allowedRoles) {
   return (req, res, next) => {
     // If no user is attached to request or auth failed
     if (!req.user) {
@@ -26,5 +26,3 @@ function requireRole(...allowedRoles) {
     next();
   };
 }
-
-module.exports = { requireRole };

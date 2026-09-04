@@ -4,33 +4,6 @@ import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { FiMail, FiLock, FiUser, FiPhone, FiCheck, FiX, FiEye, FiEyeOff, FiArrowRight, FiShield, FiCheckCircle } from 'react-icons/fi';
 
-const DEFAULT_ADMIN = {
-  fullName: 'Motel Admin',
-  email: 'admin@innkeeper.com',
-  password: 'Password123!',
-  phone: '(555) 019-2831'
-};
-
-const getStoredUsers = () => {
-  try {
-    const raw = localStorage.getItem('innkeeper_users');
-    if (!raw) {
-      const initial = [DEFAULT_ADMIN];
-      localStorage.setItem('innkeeper_users', JSON.stringify(initial));
-      return initial;
-    }
-    return JSON.parse(raw);
-  } catch {
-    return [DEFAULT_ADMIN];
-  }
-};
-
-const saveUser = (newUser) => {
-  const users = getStoredUsers();
-  users.push(newUser);
-  localStorage.setItem('innkeeper_users', JSON.stringify(users));
-};
-
 const COUNTRY_CODES = [
   { code: 'IN', name: 'India', flag: '🇮🇳', dialCode: '+91', digitsLength: 10, regex: /^[6-9][0-9]{9}$/, placeholder: '9876543210', errorMessage: 'Phone number must be a valid 10-digit Indian mobile number starting with 6, 7, 8, or 9.' },
   { code: 'US', name: 'United States', flag: '🇺🇸', dialCode: '+1', digitsLength: 10, regex: /^[2-9][0-9]{9}$/, placeholder: '2025550143', errorMessage: 'Phone number must be a valid 10-digit US phone number starting with 2-9.' },
@@ -52,7 +25,7 @@ export default function LoginPage({ onLogin }) {
   const [selectedCountry, setSelectedCountry] = useState(COUNTRY_CODES[0]); // Default India +91
 
   // Sign In Form State
-  const [signInData, setSignInData] = useState({ email: 'admin@innkeeper.com', password: 'Password123!' });
+  const [signInData, setSignInData] = useState({ email: '', password: '' });
   const [signInTouched, setSignInTouched] = useState({});
 
   // Create Account Form State
@@ -118,11 +91,6 @@ export default function LoginPage({ onLogin }) {
       errors.email = 'Email address is required.';
     } else if (!emailRegex.test(signUpData.email.trim())) {
       errors.email = 'Please enter a valid email address (e.g. username@domain.com).';
-    } else {
-      const existingUsers = getStoredUsers();
-      if (existingUsers.some((u) => u.email.toLowerCase() === signUpData.email.trim().toLowerCase())) {
-        errors.email = 'An account with this email address already exists.';
-      }
     }
 
     if (!signUpData.phone) {
@@ -152,10 +120,10 @@ export default function LoginPage({ onLogin }) {
     }
 
     return errors;
-  }, [signUpData, passwordScore]);
+  }, [signUpData, passwordScore, selectedCountry]);
 
   // Handle Form Submissions
-  const handleSignInSubmit = (e) => {
+  const handleSignInSubmit = async (e) => {
     e.preventDefault();
     setSignInTouched({ email: true, password: true });
 
@@ -165,29 +133,39 @@ export default function LoginPage({ onLogin }) {
     }
 
     setIsSubmitting(true);
-    setTimeout(() => {
-      const users = getStoredUsers();
-      const matched = users.find(
-        (u) => u.email.toLowerCase() === signInData.email.trim().toLowerCase() && u.password === signInData.password
-      );
+    try {
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: signInData.email.trim(),
+          password: signInData.password
+        })
+      });
+      const data = await res.json();
 
-      if (matched) {
-        sessionStorage.setItem('innkeeper-session', 'true');
-        sessionStorage.setItem(
-          'innkeeper-user-info',
-          JSON.stringify({ fullName: matched.fullName, email: matched.email })
-        );
-        toast.success(`Welcome back, ${matched.fullName}!`);
-        onLogin();
-        navigate('/dashboard');
-      } else {
-        toast.error('Invalid email address or password.');
+      if (!res.ok) {
+        toast.error(data.error || 'Invalid email address or password.');
         setIsSubmitting(false);
+        return;
       }
-    }, 600);
+
+      sessionStorage.setItem('innkeeper-session', 'true');
+      sessionStorage.setItem('innkeeper-token', data.token || '');
+      sessionStorage.setItem(
+        'innkeeper-user-info',
+        JSON.stringify({ fullName: data.user?.name || signInData.email, email: data.user?.email || signInData.email, role: data.user?.role })
+      );
+      toast.success(`Welcome back, ${data.user?.name || 'User'}!`);
+      if (onLogin) onLogin();
+      navigate('/dashboard');
+    } catch (err) {
+      toast.error('Failed to connect to authentication server.');
+      setIsSubmitting(false);
+    }
   };
 
-  const handleSignUpSubmit = (e) => {
+  const handleSignUpSubmit = async (e) => {
     e.preventDefault();
     setSignUpTouched({
       fullName: true,
@@ -204,22 +182,35 @@ export default function LoginPage({ onLogin }) {
     }
 
     setIsSubmitting(true);
-    setTimeout(() => {
-      const newUser = {
-        fullName: signUpData.fullName.trim(),
-        email: signUpData.email.trim().toLowerCase(),
-        phone: signUpData.phone,
-        password: signUpData.password
-      };
-      saveUser(newUser);
-      setIsSubmitting(false);
+    try {
+      const res = await fetch('/api/auth/signup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: signUpData.fullName.trim(),
+          email: signUpData.email.trim().toLowerCase(),
+          phone: signUpData.phone,
+          password: signUpData.password,
+          confirmPassword: signUpData.confirmPassword
+        })
+      });
+      const data = await res.json();
 
-      // Pre-fill email in Sign In form and navigate to Sign In page/tab
-      setSignInData({ email: newUser.email, password: '' });
+      if (!res.ok) {
+        toast.error(data.error || 'Failed to create account.');
+        setIsSubmitting(false);
+        return;
+      }
+
+      setIsSubmitting(false);
+      setSignInData({ email: signUpData.email.trim(), password: '' });
       setSignInTouched({});
       setMode('signin');
       toast.success('Account created successfully! Please sign in with your password.');
-    }, 700);
+    } catch (err) {
+      toast.error('Failed to connect to registration server.');
+      setIsSubmitting(false);
+    }
   };
 
   return (

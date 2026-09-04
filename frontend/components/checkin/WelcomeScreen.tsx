@@ -9,7 +9,11 @@ import { Button } from "@/components/ui/button";
 import { getReservation } from "@/lib/api-client";
 import { money, type ReservationSummary } from "@/lib/mock-data";
 
+import { useTranslation } from "react-i18next";
+import "@/i18n";
+
 export function WelcomeScreen({ token }: { token: string }) {
+  const { t } = useTranslation();
   const router = useRouter();
   const [reservation, setReservation] = useState<ReservationSummary | null>(null);
   const [error, setError] = useState(false);
@@ -28,9 +32,9 @@ export function WelcomeScreen({ token }: { token: string }) {
     return (
       <ScreenShell>
         <div className="h-full flex flex-col items-center justify-center text-center gap-3 py-10">
-          <p className="text-[16px] font-semibold text-slate-900">This link has expired</p>
+          <p className="text-[16px] font-semibold text-slate-900">{t("checkin.welcomeLinkExpired")}</p>
           <p className="text-[13.5px] text-slate-500 max-w-xs">
-            Secure check-in links are only valid for 48 hours. Text the front desk to get a new one.
+            {t("checkin.welcomeLinkExpiredSub")}
           </p>
         </div>
       </ScreenShell>
@@ -54,7 +58,7 @@ export function WelcomeScreen({ token }: { token: string }) {
       stepIndex={0}
       footer={
         <Button onClick={() => router.push(`/checkin/${token}/verify`)}>
-          Start check-in <ArrowRight className="h-4 w-4" />
+          {t("checkin.startCheckIn")} <ArrowRight className="h-4 w-4" />
         </Button>
       }
     >
@@ -62,22 +66,22 @@ export function WelcomeScreen({ token }: { token: string }) {
         <div className="rounded-2xl bg-gradient-to-br from-blue-600 to-blue-700 text-white p-5 mb-5 relative overflow-hidden">
           <div className="absolute -right-6 -top-6 h-28 w-28 rounded-full bg-white/10" />
           <div className="absolute -right-2 top-10 h-16 w-16 rounded-full bg-white/10" />
-          <p className="text-[13px] text-blue-100 font-medium">Welcome,</p>
+          <p className="text-[13px] text-blue-100 font-medium">{t("checkin.welcomeGuest")}</p>
           <h2 className="text-[24px] font-semibold tracking-tight">{reservation.guestName}</h2>
           <p className="text-[13px] text-blue-100 mt-1">
-            Confirmation #{reservation.confirmationNumber}
+            {t("checkin.confirmationNumber")}{reservation.confirmationNumber}
           </p>
         </div>
 
         <div className="rounded-2xl border border-slate-100 divide-y divide-slate-100 mb-5">
-          <Row icon={<BedDouble className="h-4 w-4" />} label="Room type" value={reservation.roomType} />
-          <Row icon={<CalendarDays className="h-4 w-4" />} label="Check-in" value={reservation.checkIn} />
-          <Row icon={<CalendarDays className="h-4 w-4" />} label="Check-out" value={reservation.checkOut} />
-          <Row icon={<Users className="h-4 w-4" />} label="Guests" value={`${reservation.guests} guests`} />
+          <Row icon={<BedDouble className="h-4 w-4" />} label={t("checkin.roomType")} value={reservation.roomType} />
+          <Row icon={<CalendarDays className="h-4 w-4" />} label={t("checkin.checkInDate")} value={reservation.checkIn} />
+          <Row icon={<CalendarDays className="h-4 w-4" />} label={t("checkin.checkOutDate")} value={reservation.checkOut} />
+          <Row icon={<Users className="h-4 w-4" />} label={t("checkin.guestsCount")} value={`${reservation.guests} ${t("checkin.guestsCount").toLowerCase()}`} />
         </div>
 
         <div className="rounded-2xl bg-slate-50 p-4 mb-4">
-          <p className="text-[13px] font-medium text-slate-600 mb-2">Room charges</p>
+          <p className="text-[13px] font-medium text-slate-600 mb-2">{t("checkin.roomChargesHeader")}</p>
           <div className="flex justify-between text-[14px] text-slate-500 mb-1">
             <span>
               {reservation.nights} nights × {money(reservation.roomRate)}
@@ -85,14 +89,14 @@ export function WelcomeScreen({ token }: { token: string }) {
             <span>{money(reservation.nights * reservation.roomRate)}</span>
           </div>
           <div className="flex justify-between text-[14px] text-slate-500">
-            <span>Taxes &amp; fees</span>
+            <span>{t("checkin.taxesAndFees")}</span>
             <span>{money(reservation.taxes)}</span>
           </div>
         </div>
 
         <div className="flex items-start gap-2 text-[12.5px] text-slate-400 mb-2">
           <Info className="h-3.5 w-3.5 mt-0.5 shrink-0" />
-          <span>Check-in takes about 3 minutes. Have a photo ID ready.</span>
+          <span>{t("checkin.checkinTimeInfo")}</span>
         </div>
       </div>
     </ScreenShell>

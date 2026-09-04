@@ -9,16 +9,16 @@ const buttonVariants = cva(
   {
     variants: {
       variant: {
-        default: "bg-primary text-primary-foreground shadow-[0_10px_25px_rgba(37,99,235,0.16)] hover:-translate-y-0.5 hover:bg-primary/90",
+        default: "bg-blue-600 text-white shadow-[0_10px_25px_rgba(37,99,235,0.2)] hover:-translate-y-0.5 hover:bg-blue-700 active:bg-blue-800",
         destructive:
-          "bg-destructive text-white hover:bg-destructive/90 focus-visible:ring-destructive/20 dark:focus-visible:ring-destructive/40 dark:bg-destructive/60",
+          "bg-red-600 text-white hover:bg-red-700 focus-visible:ring-red-500/20",
         outline:
-          "border border-slate-300 bg-white text-slate-800 shadow-xs hover:bg-slate-100 dark:bg-slate-800 dark:text-slate-100 dark:border-slate-600 dark:hover:bg-slate-700",
+          "border border-blue-200 bg-white text-blue-700 shadow-xs hover:bg-blue-50 dark:bg-slate-800 dark:text-blue-300 dark:border-blue-800 dark:hover:bg-slate-700",
         secondary:
-          "bg-secondary text-secondary-foreground hover:bg-secondary/80",
+          "bg-blue-100 text-blue-800 hover:bg-blue-200 dark:bg-blue-900/50 dark:text-blue-200",
         ghost:
-          "text-slate-700 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-200 dark:hover:bg-slate-800 dark:hover:text-slate-100",
-        link: "text-primary underline-offset-4 hover:underline",
+          "text-blue-700 hover:bg-blue-50 hover:text-blue-800 dark:text-blue-300 dark:hover:bg-slate-800",
+        link: "text-blue-600 underline-offset-4 hover:underline",
       },
       size: {
         default: "h-9 px-4 py-2 has-[>svg]:px-3",
