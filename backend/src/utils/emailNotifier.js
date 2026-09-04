@@ -3,7 +3,8 @@
  */
 export async function sendCheckInEmail({ guestEmail, guestName, reservationId, roomId, checkInDate }) {
   try {
-    const checkInUrl = `http://localhost:5173/checkin?resId=${reservationId}`;
+    const appBaseUrl = process.env.APP_BASE_URL || 'http://localhost:5173';
+    const checkInUrl = `${appBaseUrl}/checkin?resId=${reservationId}`;
 
     // Log email notification for verification in logs
     console.log(`\n======================================================`);
