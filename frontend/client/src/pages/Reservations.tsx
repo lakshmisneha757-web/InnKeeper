@@ -21,7 +21,16 @@ function normalizeList(data: any) {
   if (data?.items) return data;
   return { items: [], total: 0 };
 }
-
+const COUNTRY_CODES = [
+  { code: "IN", name: "India", flag: "🇮🇳", dialCode: "+91", digitsLength: 10, placeholder: "9876543210" },
+  { code: "US", name: "United States", flag: "🇺🇸", dialCode: "+1", digitsLength: 10, placeholder: "2025550143" },
+  { code: "GB", name: "United Kingdom", flag: "🇬🇧", dialCode: "+44", digitsLength: 10, placeholder: "7911123456" },
+  { code: "CA", name: "Canada", flag: "🇨🇦", dialCode: "+1", digitsLength: 10, placeholder: "4165550123" },
+  { code: "AU", name: "Australia", flag: "🇦🇺", dialCode: "+61", digitsLength: 9, placeholder: "412345678" },
+  { code: "AE", name: "UAE", flag: "🇦🇪", dialCode: "+971", digitsLength: 9, placeholder: "501234567" },
+  { code: "SG", name: "Singapore", flag: "🇸🇬", dialCode: "+65", digitsLength: 8, placeholder: "81234567" },
+  { code: "DE", name: "Germany", flag: "🇩🇪", dialCode: "+49", digitsLength: 11, placeholder: "15123456789" },
+];
 const STATUS_COLORS: Record<string, string> = {
   confirmed: "bg-blue-100 text-blue-700",
   checked_in: "bg-green-100 text-green-700",
@@ -47,8 +56,9 @@ export default function ReservationsPage() {
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [editing, setEditing] = useState<any | null>(null);
+const [selectedCountry, setSelectedCountry] = useState(COUNTRY_CODES[0]);
   const qc = useQueryClient();
+    const [editing, setEditing] = useState<any | null>(null);
 
   const reservationsQ = useQuery({
     queryKey: ["reservations", page, search],
@@ -173,23 +183,19 @@ export default function ReservationsPage() {
     const phoneVal = values.phone || form.getValues("phone") || "";
 
     const emailRegex = /^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/;
-    const indiaPhoneRegex = /^(?:\+91[- ]?)?[6-9][0-9]{9}$/;
 
-    if (emailVal.trim() && !emailRegex.test(emailVal.trim())) {
-      toast.error("Please enter a valid email address (e.g. username@domain.com).");
-      return;
-    }
-
-    if (phoneVal.trim() && !indiaPhoneRegex.test(phoneVal.trim())) {
-      toast.error("Phone number must be a valid 10-digit Indian mobile number starting with 6, 7, 8, or 9 (e.g. 9876543210).");
-      return;
-    }
+if (emailVal.trim() && !emailRegex.test(emailVal.trim())) {
+  toast.error("Please enter a valid email address (e.g. username@domain.com).");
+  return;
+}
 
     const payload: any = {
       firstName: fn,
       lastName: ln,
       email: emailVal,
-      phone: phoneVal,
+      phone: phoneVal
+  ? `${selectedCountry.dialCode}${phoneVal.trim()}`
+  : "",
       roomId: values.roomId || form.getValues("roomId") ? Number(values.roomId || form.getValues("roomId")) : null,
       checkIn: ci,
       checkOut: co,
@@ -430,16 +436,48 @@ export default function ReservationsPage() {
                     </FormControl>
                   </FormItem>
                   <FormItem>
-                    <FormLabel className="text-xs font-medium text-slate-700">{t("roomDrawer.phone10Digits")}</FormLabel>
-                    <FormControl>
-                      <Input
-                        placeholder="9876543210"
-                        maxLength={10}
-                        value={form.watch("phone") || ""}
-                        onChange={(e) => form.setValue("phone", e.target.value.replace(/\D/g, "").slice(0, 10))}
-                      />
-                    </FormControl>
-                  </FormItem>
+  <FormLabel className="text-xs font-medium text-slate-700">
+    Phone Number *
+  </FormLabel>
+
+  <FormControl>
+    <div className="flex rounded-md border border-input shadow-sm focus-within:ring-1 focus-within:ring-ring">
+      
+      <select
+        value={selectedCountry.code}
+        onChange={(e) => {
+          const country =
+            COUNTRY_CODES.find((c) => c.code === e.target.value) ||
+            COUNTRY_CODES[0];
+
+          setSelectedCountry(country);
+        }}
+className="h-10 w-[105px] shrink-0 rounded-l-md border-r bg-muted/60 px-2 py-2 text-xs font-semibold outline-none hover:bg-muted cursor-pointer"      >
+        {COUNTRY_CODES.map((country) => (
+          <option key={country.code} value={country.code}>
+            {country.flag} {country.dialCode} ({country.name})
+          </option>
+        ))}
+      </select>
+
+      <Input
+        id="phone"
+        type="tel"
+        maxLength={selectedCountry.digitsLength}
+        value={form.watch("phone") || ""}
+        onChange={(e) => {
+          const raw = e.target.value
+            .replace(/\D/g, "")
+            .slice(0, selectedCountry.digitsLength);
+
+          form.setValue("phone", raw);
+        }}
+        placeholder={selectedCountry.placeholder}
+className="h-10 min-w-0 flex-1 border-0 rounded-l-none pl-3 shadow-none focus-visible:ring-0"      />
+
+    </div>
+  </FormControl>
+</FormItem>
                 </div>
               </div>
 

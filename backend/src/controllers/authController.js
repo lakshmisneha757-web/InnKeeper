@@ -14,8 +14,20 @@ const COOKIE_OPTS = {
   secure: process.env.NODE_ENV === 'production',
 };
 
-// Simple in-memory reset tokens store (use Redis/DB in production)
 const resetTokens = new Map();
+
+function normalizeUser(user) {
+  if (!user) return null;
+
+  return {
+    id: String(user.id),
+    name: user.name,
+    email: user.email,
+    role: user.role,
+    createdAt: user.created_at ?? user.createdAt,
+    updatedAt: user.updated_at ?? user.updatedAt,
+  };
+}
 
 function generateToken(user) {
   return jwt.sign(
@@ -81,14 +93,15 @@ export async function signup(req, res) {
 
 export async function login(req, res) {
   try {
-    const { email, password } = req.body;
+    const email = String(req.body?.email || '').trim().toLowerCase();
+    const password = String(req.body?.password || '');
 
     if (!email || !password) {
       return res.status(400).json({ error: 'Email and password are required.' });
     }
 
     const user = await prisma.user.findUnique({ where: { email } });
-    if (!user) {
+    if (!user || !user.password) {
       return res.status(401).json({ error: 'Invalid email or password.' });
     }
 
@@ -103,18 +116,13 @@ export async function login(req, res) {
     return res.status(200).json({
       message: 'Login successful.',
       token,
-      user: {
-        id: String(user.id),
-        name: user.name,
-        email: user.email,
-        role: user.role,
-        createdAt: user.created_at,
-        updatedAt: user.updated_at,
-      },
+      user: normalizeUser(user),
     });
   } catch (err) {
     console.error('Login error:', err);
-    return res.status(500).json({ error: 'Internal server error during login.' });
+    return res.status(500).json({
+      error: err?.message || 'Internal server error during login.',
+    });
   }
 }
 

@@ -11,27 +11,39 @@ function paginate(data, page, limit) {
 export async function listReservations(req, res) {
   try {
     const { page = 1, limit = 50, q = '' } = req.query;
-    const [reservations, rooms] = await Promise.all([
-      prisma.reservation.findMany({ include: { guest: true, payments: true }, orderBy: { id: 'desc' } }),
-      prisma.room.findMany()
+    const skip = (Number(page) - 1) * Number(limit);
+    const take = Number(limit);
+
+    const whereClause = q ? {
+      OR: [
+        { guest: { firstName: { contains: q, mode: 'insensitive' } } },
+        { guest: { lastName: { contains: q, mode: 'insensitive' } } },
+        { status: { contains: q, mode: 'insensitive' } }
+      ]
+    } : {};
+
+    const [total, reservations] = await Promise.all([
+      prisma.reservation.count({ where: whereClause }),
+      prisma.reservation.findMany({
+        where: whereClause,
+        include: { guest: true, room: true, payments: true },
+        orderBy: { id: 'desc' },
+        skip,
+        take
+      })
     ]);
 
-    const mapped = reservations.map(r => {
-      const roomObj = rooms.find(rm => String(rm.id) === String(r.roomId) || String(rm.room_number) === String(r.roomId));
-      const roomNum = roomObj ? roomObj.room_number : (r.roomId ? String(r.roomId) : "—");
-      return {
-        ...r,
-        roomNumber: roomNum,
-        room: roomObj ? { id: roomObj.id, room_number: roomObj.room_number, number: roomObj.room_number, floor: roomObj.floor } : null
-      };
-    });
+    const pages = Math.ceil(total / take);
 
-    const filtered = q
-      ? mapped.filter(r => `${r.guest?.firstName || ''} ${r.guest?.lastName || ''} ${r.roomNumber} ${r.status}`.toLowerCase().includes(q.toLowerCase()))
-      : mapped;
-    res.json(paginate(filtered, Number(page), Number(limit)));
+    const mapped = reservations.map(r => ({
+      ...r,
+      roomNumber: r.room ? String(r.room.room_number) : (r.roomId ? String(r.roomId) : "—"),
+      room: r.room ? { id: r.room.id, room_number: r.room.room_number, number: r.room.room_number, floor: r.room.floor } : null
+    }));
+
+    res.json({ items: mapped, total, page: Number(page), limit: take, pages });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'An internal error occurred while processing your request.' });
   }
 }
 
@@ -108,11 +120,21 @@ export async function createReservation(req, res) {
     }
 
     if (phone) {
-      const cleanPhone = String(phone).replace(/\D/g, '');
-      if (cleanPhone.length !== 10 || !/^[6-9]\d{9}$/.test(cleanPhone) || /^(\d)\1{9}$/.test(cleanPhone) || cleanPhone === '1234567890') {
-        return res.status(400).json({ error: 'Please provide a valid 10-digit mobile phone number.' });
-      }
-    }
+  const phoneNumber = String(phone).trim();
+  const cleanPhone = phoneNumber.replace(/\D/g, '');
+
+  const internationalPhoneRegex = /^\+?[1-9]\d{9,14}$/;
+
+  if (
+    !internationalPhoneRegex.test(phoneNumber) ||
+    /^(\d)\1+$/.test(cleanPhone) ||
+    cleanPhone === '1234567890'
+  ) {
+    return res.status(400).json({
+      error: 'Please provide a valid international phone number.'
+    });
+  }
+}
 
     let finalGuestId = guestId ? Number(guestId) : null;
 
@@ -210,7 +232,7 @@ export async function createReservation(req, res) {
     res.status(201).json(reservation);
   } catch (err) {
     console.error('createReservation error:', err);
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'An internal error occurred while processing your request.' });
   }
 }
 
@@ -322,7 +344,7 @@ export async function updateReservation(req, res) {
     res.json(reservation);
   } catch (err) {
     console.error('updateReservation error:', err);
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'An internal error occurred while processing your request.' });
   }
 }
 
@@ -331,6 +353,6 @@ export async function deleteReservation(req, res) {
     await prisma.reservation.delete({ where: { id: Number(req.params.id) } });
     res.json({ success: true });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'An internal error occurred while processing your request.' });
   }
 }

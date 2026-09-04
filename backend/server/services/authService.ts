@@ -7,19 +7,41 @@ import { prisma } from "../prisma/client";
 export type UserRole = "admin" | "manager" | "receptionist" | "housekeeping";
 
 export type AuthUser = {
-  id: string;
+  id: number;
   email: string;
   name: string;
   role: UserRole;
   phone?: string | null;
-  passwordHash: string;
-  resetTokenHash?: string | null;
-  resetTokenExpiresAt?: Date | null;
+  password: string;
   createdAt: Date;
   updatedAt: Date;
 };
 
-export type PublicUser = Omit<AuthUser, "passwordHash" | "resetTokenHash" | "resetTokenExpiresAt">;
+export type PublicUser = Omit<AuthUser, "password">;
+
+interface PrismaUserRecord {
+  id: number;
+  email: string;
+  name: string;
+  phone: string | null;
+  password: string;
+  role: string;
+  created_at: Date;
+  updated_at: Date;
+}
+
+export function toAuthUser(user: PrismaUserRecord): AuthUser {
+  return {
+    id: String(user.id),
+    email: user.email,
+    name: user.name,
+    role: normalizeRole(user.role),
+    phone: user.phone,
+    passwordHash: user.password,
+    createdAt: user.created_at,
+    updatedAt: user.updated_at,
+  };
+}
 
 export function normalizeRole(role?: string): UserRole {
   const normalized = role?.toLowerCase();
@@ -34,12 +56,20 @@ export function isStrongPassword(password: string) {
 }
 
 export function buildPublicUser(user: AuthUser): PublicUser {
-  const { passwordHash, resetTokenHash, resetTokenExpiresAt, ...rest } = user;
+  const { password, ...rest } = user;
   return rest;
 }
 
+interface ResetTokenEntry {
+  tokenHash: string;
+  expiresAt: Date;
+}
+
+const resetTokens = new Map<string, ResetTokenEntry>();
+
 export async function registerUser(input: { email: string; password: string; name: string; phone?: string; role?: string }) {
-  const existing = await prisma.user.findUnique({ where: { email: input.email } });
+  const normalizedEmail = input.email.trim().toLowerCase();
+  const existing = await prisma.user.findUnique({ where: { email: normalizedEmail } });
   if (existing) {
     throw Object.assign(new Error("Email already registered"), { status: 409 });
   }
@@ -51,38 +81,45 @@ export async function registerUser(input: { email: string; password: string; nam
   const passwordHash = await bcrypt.hash(input.password, 10);
   const user = await prisma.user.create({
     data: {
-      email: input.email,
-      name: input.name,
+      email: normalizedEmail,
+      name: input.name.trim(),
       phone: input.phone ?? null,
-      passwordHash,
+      password: passwordHash,
       role: normalizeRole(input.role),
     },
   });
 
-  return buildPublicUser(user as AuthUser);
+  return buildPublicUser(toAuthUser(user));
 }
 
 export async function loginUser(input: { email: string; password: string; rememberMe?: boolean }) {
-  const user = await prisma.user.findUnique({ where: { email: input.email } });
+  const normalizedEmail = input.email.trim().toLowerCase();
+  const user = await prisma.user.findUnique({ where: { email: normalizedEmail } });
   if (!user) {
     throw Object.assign(new Error("Invalid credentials"), { status: 401 });
   }
 
-  const valid = await bcrypt.compare(input.password, user.passwordHash);
+  const valid = await bcrypt.compare(input.password, user.password);
   if (!valid) {
     throw Object.assign(new Error("Invalid credentials"), { status: 401 });
   }
 
-  const accessToken = jwt.sign({ sub: user.id, email: user.email, role: user.role }, config.jwtSecret, { expiresIn: input.rememberMe ? "30d" : "12h" });
+  const authUser = toAuthUser(user);
+  const accessToken = jwt.sign(
+    { sub: authUser.id, email: authUser.email, role: authUser.role },
+    config.jwtSecret,
+    { expiresIn: input.rememberMe ? "30d" : "12h" }
+  );
 
   return {
-    user: buildPublicUser(user as AuthUser),
+    user: buildPublicUser(authUser),
     accessToken,
   };
 }
 
 export async function forgotPassword(input: { email: string }) {
-  const user = await prisma.user.findUnique({ where: { email: input.email } });
+  const normalizedEmail = input.email.trim().toLowerCase();
+  const user = await prisma.user.findUnique({ where: { email: normalizedEmail } });
   if (!user) {
     return { message: "If the email exists, reset instructions were sent." };
   }
@@ -91,24 +128,24 @@ export async function forgotPassword(input: { email: string }) {
   const resetTokenHash = await bcrypt.hash(resetToken, 10);
   const expiresAt = new Date(Date.now() + 1000 * 60 * 30);
 
-  await prisma.user.update({
-    where: { id: user.id },
-    data: {
-      resetTokenHash,
-      resetTokenExpiresAt: expiresAt,
-    },
+  resetTokens.set(normalizedEmail, {
+    tokenHash: resetTokenHash,
+    expiresAt,
   });
 
   return { message: "If the email exists, reset instructions were sent.", resetToken };
 }
 
 export async function resetPassword(input: { email: string; token: string; password: string }) {
-  const user = await prisma.user.findUnique({ where: { email: input.email } });
-  if (!user || !user.resetTokenHash || !user.resetTokenExpiresAt || user.resetTokenExpiresAt < new Date()) {
+  const normalizedEmail = input.email.trim().toLowerCase();
+  const user = await prisma.user.findUnique({ where: { email: normalizedEmail } });
+  const entry = resetTokens.get(normalizedEmail);
+
+  if (!user || !entry || entry.expiresAt < new Date()) {
     throw Object.assign(new Error("Invalid or expired reset token"), { status: 400 });
   }
 
-  const valid = await bcrypt.compare(input.token, user.resetTokenHash);
+  const valid = await bcrypt.compare(input.token, entry.tokenHash);
   if (!valid) {
     throw Object.assign(new Error("Invalid or expired reset token"), { status: 400 });
   }
@@ -121,16 +158,20 @@ export async function resetPassword(input: { email: string; token: string; passw
   await prisma.user.update({
     where: { id: user.id },
     data: {
-      passwordHash,
-      resetTokenHash: null,
-      resetTokenExpiresAt: null,
+      password: passwordHash,
     },
   });
+
+  resetTokens.delete(normalizedEmail);
 
   return { message: "Password updated successfully." };
 }
 
 export async function getUserById(id: string) {
-  const user = await prisma.user.findUnique({ where: { id } });
-  return user ? buildPublicUser(user as AuthUser) : null;
+  const numericId = Number.parseInt(id, 10);
+  if (Number.isNaN(numericId)) {
+    return null;
+  }
+  const user = await prisma.user.findUnique({ where: { id: numericId } });
+  return user ? buildPublicUser(toAuthUser(user)) : null;
 }

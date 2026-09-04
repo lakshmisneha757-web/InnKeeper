@@ -8,12 +8,14 @@ export async function getDashboard(req, res) {
     const tomorrow = new Date(today);
     tomorrow.setDate(tomorrow.getDate() + 1);
 
-    const [rooms, reservations, guests, payments, notifications] = await Promise.all([
+    const [rooms, reservations, guests, payments, notifications, totalRevenueAggr, todayRevenueAggr] = await Promise.all([
       prisma.room.findMany({ include: { room_type: true } }),
       prisma.reservation.findMany({ include: { guest: true }, orderBy: { createdAt: 'desc' }, take: 20 }),
       prisma.guest.findMany({ orderBy: { createdAt: 'desc' }, take: 20 }),
       prisma.payment.findMany({ orderBy: { createdAt: 'desc' }, take: 10 }),
       prisma.appNotification.findMany({ orderBy: { createdAt: 'desc' }, take: 10 }),
+      prisma.payment.aggregate({ _sum: { amount: true } }),
+      prisma.payment.aggregate({ where: { createdAt: { gte: today } }, _sum: { amount: true } })
     ]);
 
     const totalRooms = rooms.length;
@@ -21,11 +23,8 @@ export async function getDashboard(req, res) {
     const availableRooms = totalRooms - occupiedRooms;
     const occupancyRate = totalRooms > 0 ? Math.round((occupiedRooms / totalRooms) * 100) : 0;
 
-    const todayRevenue = payments
-      .filter(p => new Date(p.createdAt) >= today)
-      .reduce((sum, p) => sum + (p.amount || 0), 0);
-
-    const totalRevenue = payments.reduce((sum, p) => sum + (p.amount || 0), 0);
+    const todayRevenue = todayRevenueAggr._sum.amount || 0;
+    const totalRevenue = totalRevenueAggr._sum.amount || 0;
 
     const arrivalsToday = reservations.filter(r => {
       const ci = new Date(r.checkIn);

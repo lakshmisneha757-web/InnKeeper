@@ -11,7 +11,7 @@ export async function getAnalytics(req, res) {
     ]);
 
     const totalRooms = rooms.length;
-    const occupiedRooms = rooms.filter(r => !r.availability).length;
+    const occupiedRooms = rooms.filter(r => String(r.status).toLowerCase() === 'occupied').length;
     const occupancyRate = totalRooms > 0 ? Math.round((occupiedRooms / totalRooms) * 100) : 0;
 
     const totalRevenue = payments
