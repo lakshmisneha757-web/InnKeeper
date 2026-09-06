@@ -307,6 +307,7 @@ if (emailVal.trim() && !emailRegex.test(emailVal.trim())) {
                     </TableCell>
                     <TableCell>{r.checkIn ? new Date(r.checkIn).toLocaleDateString() : "—"}</TableCell>
                     <TableCell>{r.checkOut ? new Date(r.checkOut).toLocaleDateString() : "—"}</TableCell>
+                    <TableCell>
                       <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${STATUS_COLORS[(r.status || '').toLowerCase()] ?? "bg-slate-100 text-slate-600"}`}>
                         {(() => {
                           const st = (r.status || '').toLowerCase();
@@ -317,6 +318,7 @@ if (emailVal.trim() && !emailRegex.test(emailVal.trim())) {
                           return st.replace('_', ' ');
                         })()}
                       </span>
+                    </TableCell>
                     <TableCell>₹{(r.totalCharges ?? 0).toLocaleString()}</TableCell>
                     <TableCell className="text-xs text-muted-foreground">
                       {r.source === "Direct" ? t("reservations.sourceDirect") : (r.source ?? "—")}

@@ -559,19 +559,56 @@ export default function CheckInVerification() {
     }
   };
 
+  // Front-desk alternative to Razorpay: record a cash/card payment collected in person.
+  const handleManualPayment = async (method: "Cash" | "Card") => {
+    if (!selectedResId) {
+      toast.error("Please select a reservation first");
+      return;
+    }
+    setSubmittingBooking(true);
+    try {
+      const res = await fetch("/api/checkin/manual-payment", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reservationId: selectedResId, method }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.success) {
+        toast.error(data.error || "Unable to record payment.");
+        return;
+      }
+      setPaymentDone(true);
+      qc.invalidateQueries({ queryKey: ["payments"] });
+      qc.invalidateQueries({ queryKey: ["reservations"] });
+      toast.success(data.message || "Payment recorded. You can now complete check-in.");
+      setStep(3);
+    } catch (err) {
+      toast.error("Network error while recording payment.");
+    } finally {
+      setSubmittingBooking(false);
+    }
+  };
+
   // Step 3 of Completion: Complete Check-In API call -> Marks reservation Checked-In & opens Check-In Completed Animation Page
   const handleCompleteCheckIn = async () => {
     if (!selectedResId) return;
     setCompletingCheckIn(true);
 
     try {
-      const res = await fetch("/api/guest/checkin/complete", {
+      const res = await fetch("/api/checkin/complete", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ reservationId: selectedResId }),
       });
 
+      const data = await res.json().catch(() => ({}));
       setCompletingCheckIn(false);
+
+      if (!res.ok || !data.success) {
+        toast.error(data.error || "Unable to complete check-in.");
+        return;
+      }
+
       setStep(3);
       setCheckInCompletedAnimation(true);
       setDigitalKeyGenerated(false);
@@ -583,11 +620,7 @@ export default function CheckInVerification() {
       fetchReservations();
     } catch (err) {
       setCompletingCheckIn(false);
-      setStep(3);
-      setCheckInCompletedAnimation(true);
-      setDigitalKeyGenerated(false);
-      toast.success("Check-in completed successfully!");
-      fetchReservations();
+      toast.error("Network error while completing check-in.");
     }
   };
 
@@ -1076,7 +1109,7 @@ export default function CheckInVerification() {
           <div className="flex justify-between items-center pb-1">
             <div>
               <p className="text-xs font-medium text-muted-foreground">
-                Complete your secure Razorpay payment to continue check-in.
+                Collect payment online via Razorpay, or record cash/card taken at the front desk.
               </p>
             </div>
             <Button variant="ghost" size="sm" onClick={() => setStep(1)} className="rounded-xl text-xs">
@@ -1127,6 +1160,32 @@ export default function CheckInVerification() {
                 <>Pay with Razorpay <ChevronRight className="w-4 h-4" /></>
               )}
             </Button>
+
+            <div className="relative py-1 text-center">
+              <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-dashed border-border" /></div>
+              <span className="relative bg-card px-3 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">or</span>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <Button
+                type="button"
+                variant="outline"
+                disabled={submittingBooking}
+                onClick={() => handleManualPayment("Cash")}
+                className="h-11 rounded-2xl text-sm font-semibold"
+              >
+                Cash at Desk
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                disabled={submittingBooking}
+                onClick={() => handleManualPayment("Card")}
+                className="h-11 rounded-2xl text-sm font-semibold"
+              >
+                Card at Desk
+              </Button>
+            </div>
           </form>
         </div>
       )}

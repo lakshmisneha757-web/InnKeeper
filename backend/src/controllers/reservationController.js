@@ -99,6 +99,25 @@ export async function createReservation(req, res) {
       }
     }
 
+    if (targetRoomId) {
+      const conflicting = await prisma.reservation.findFirst({
+        where: {
+          roomId: targetRoomId,
+          status: { not: 'checked_out' },
+          checkIn: { lt: checkOutDate },
+          checkOut: { gt: checkInDate },
+        },
+        include: { guest: true, room: true }
+      });
+      if (conflicting) {
+        const guestName = conflicting.guest ? `${conflicting.guest.firstName} ${conflicting.guest.lastName}`.trim() : 'another guest';
+        const roomLabel = conflicting.room?.room_number || targetRoomId;
+        return res.status(409).json({
+          error: `Room ${roomLabel} is already booked for ${guestName} from ${conflicting.checkIn.toISOString().slice(0, 10)} to ${conflicting.checkOut.toISOString().slice(0, 10)}. Please choose different dates or another room.`
+        });
+      }
+    }
+
     if (firstName || lastName) {
       const fn = String(firstName || '').trim();
       const ln = String(lastName || '').trim();
@@ -272,6 +291,31 @@ export async function updateReservation(req, res) {
     }
 
     const currentRes = await prisma.reservation.findUnique({ where: { id: Number(req.params.id) } });
+
+    const effectiveRoomId = updateData.roomId !== undefined ? updateData.roomId : currentRes?.roomId;
+    const effectiveCheckIn = updateData.checkIn || currentRes?.checkIn;
+    const effectiveCheckOut = updateData.checkOut || currentRes?.checkOut;
+    const datesOrRoomChanging = updateData.roomId !== undefined || updateData.checkIn !== undefined || updateData.checkOut !== undefined;
+
+    if (datesOrRoomChanging && effectiveRoomId && effectiveCheckIn && effectiveCheckOut) {
+      const conflicting = await prisma.reservation.findFirst({
+        where: {
+          id: { not: Number(req.params.id) },
+          roomId: effectiveRoomId,
+          status: { not: 'checked_out' },
+          checkIn: { lt: effectiveCheckOut },
+          checkOut: { gt: effectiveCheckIn },
+        },
+        include: { guest: true, room: true }
+      });
+      if (conflicting) {
+        const guestName = conflicting.guest ? `${conflicting.guest.firstName} ${conflicting.guest.lastName}`.trim() : 'another guest';
+        const roomLabel = conflicting.room?.room_number || effectiveRoomId;
+        return res.status(409).json({
+          error: `Room ${roomLabel} is already booked for ${guestName} from ${conflicting.checkIn.toISOString().slice(0, 10)} to ${conflicting.checkOut.toISOString().slice(0, 10)}. Please choose different dates or another room.`
+        });
+      }
+    }
 
     // Handle guest updates if guest names/email are passed
     if (currentRes?.guestId && (firstName || lastName || email || phone)) {

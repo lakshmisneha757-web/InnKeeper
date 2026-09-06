@@ -62,21 +62,14 @@ export default function MetricsDashboard({ rooms, reservations }: MetricsDashboa
     return { occupancyRate, adr, revpar, totalRooms, occupiedRooms };
   }, [rooms, reservations]);
 
-  // Generate weekly data with realistic fallback when no reservations match today's week
   const weeklyData = useMemo(() => {
     const days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
     const today = new Date();
-    const totalRooms = rooms.length || 30;
-    const hasTodayData = reservations.some((r) => {
-      const ci = new Date(r.checkIn);
-      const co = new Date(r.checkOut);
-      return ci <= today && co > today && (r.status === "checked_in" || r.status === "confirmed");
-    });
+    const totalRooms = rooms.length;
 
     return days.map((day, i) => {
       const date = new Date(today);
       date.setDate(today.getDate() - (6 - i));
-      const dateStr = date.toDateString();
       const dayReservations = reservations.filter((r) => {
         const ci = new Date(r.checkIn);
         const co = new Date(r.checkOut);
@@ -89,22 +82,23 @@ export default function MetricsDashboard({ rooms, reservations }: MetricsDashboa
         ? Math.round(dayRevenue / dayReservations.length)
         : 0;
 
-      // If no real data for this day, generate realistic simulated data
-      const simulatedOccupancy = hasTodayData
-        ? dayOccupancy
-        : Math.round(60 + Math.sin(i * 0.8) * 15 + Math.random() * 10);
-      const simulatedAdr = hasTodayData
-        ? dayAdr
-        : Math.round(120 + Math.sin(i * 1.2) * 30 + Math.random() * 20);
-
       return {
         day,
-        occupancy: dayOccupancy || simulatedOccupancy,
-        adr: dayAdr || simulatedAdr,
-        revpar: Math.round((dayAdr || simulatedAdr) * (dayOccupancy || simulatedOccupancy) / 100),
+        occupancy: dayOccupancy,
+        adr: dayAdr,
+        revpar: Math.round((dayAdr * dayOccupancy) / 100),
       };
     });
   }, [rooms, reservations]);
+
+  const adrTrend = useMemo(() => {
+    const withData = weeklyData.filter((d) => d.adr > 0);
+    if (withData.length < 2) return null;
+    const first = withData[0].adr;
+    const last = withData[withData.length - 1].adr;
+    if (first === 0) return null;
+    return Math.round(((last - first) / first) * 1000) / 10;
+  }, [weeklyData]);
 
   const container = {
     hidden: { opacity: 0 },
@@ -247,10 +241,16 @@ export default function MetricsDashboard({ rooms, reservations }: MetricsDashboa
           <CardHeader className="pb-2">
             <div className="flex items-center justify-between">
               <CardTitle className="text-sm font-medium">{t("dashboard.adrPerformance")}</CardTitle>
-              <div className="flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700">
-                <ArrowUpRight className="h-3.5 w-3.5" />
-                Up 8.2%
-              </div>
+              {adrTrend !== null && (
+                <div
+                  className={`flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium ${
+                    adrTrend >= 0 ? "bg-emerald-50 text-emerald-700" : "bg-red-50 text-red-700"
+                  }`}
+                >
+                  <ArrowUpRight className={`h-3.5 w-3.5 ${adrTrend < 0 ? "rotate-180" : ""}`} />
+                  {adrTrend >= 0 ? "Up" : "Down"} {Math.abs(adrTrend)}%
+                </div>
+              )}
             </div>
           </CardHeader>
           <CardContent>

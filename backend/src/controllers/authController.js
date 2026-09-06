@@ -39,7 +39,8 @@ function generateToken(user) {
 
 export async function signup(req, res) {
   try {
-    const { name, email, phone, password, confirmPassword, role } = req.body;
+    const { name, phone, password, confirmPassword, role } = req.body;
+    const email = String(req.body?.email || '').trim().toLowerCase();
 
     if (!name || !email || !password) {
       return res.status(400).json({ error: 'Name, email, and password are required.' });

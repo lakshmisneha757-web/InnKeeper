@@ -1,9 +1,18 @@
 import { useState, useMemo } from "react";
 import { motion } from "framer-motion";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useForm } from "react-hook-form";
+import { toast } from "sonner";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Form, FormItem, FormLabel, FormControl } from "@/components/ui/form";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DataTablePagination } from "@/components/ui/DataTablePagination";
+import { apiClient } from "@/lib/api";
+import { useStore } from "@/lib/store";
 import {
   Bed,
   Users,
@@ -20,6 +29,9 @@ import {
   Eye,
   ArrowUpDown,
   Building2,
+  Plus,
+  Pencil,
+  Trash2,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
@@ -58,11 +70,118 @@ const getTypeIcon = (typeStr: string) => {
 
 export default function RoomStatusBoard({ rooms, onRoomClick }: RoomStatusBoardProps) {
   const { t } = useTranslation();
+  const qc = useQueryClient();
+  const setRoomsInStore = useStore((state) => state.setRooms);
+
+  // Dashboard renders this board from a Zustand store it polls on an interval
+  // (not React Query), so a plain queryClient invalidation doesn't reach it -
+  // push the fresh list into that store directly after any room mutation.
+  const refreshRoomsStore = async () => {
+    try {
+      const { data } = await apiClient.rooms.list({ limit: 250 });
+      const list = Array.isArray(data) ? data : data?.items ?? [];
+      setRoomsInStore(list as any);
+    } catch {
+      // best-effort; the 15s dashboard poll will still pick up the change
+    }
+  };
   const [viewMode, setViewMode] = useState<"comfortable" | "compact" | "list">("comfortable");
   const [sortOption, setSortOption] = useState<string>("floor-asc");
   const [selectedFloor, setSelectedFloor] = useState<number | "all">("all");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState<number>(20);
+
+  const [roomDialogOpen, setRoomDialogOpen] = useState(false);
+  const [editingRoom, setEditingRoom] = useState<Room | null>(null);
+  const roomForm = useForm({
+    defaultValues: { number: "", type: "Standard", floor: 1, rate: 100, capacity: 2, status: "vacant" },
+  });
+
+  const openAddRoom = () => {
+    setEditingRoom(null);
+    roomForm.reset({ number: "", type: "Standard", floor: 1, rate: 100, capacity: 2, status: "vacant" });
+    setRoomDialogOpen(true);
+  };
+
+  const openEditRoom = (room: Room) => {
+    setEditingRoom(room);
+    roomForm.reset({
+      number: room.number,
+      type: room.type,
+      floor: room.floor,
+      rate: room.rate,
+      capacity: room.capacity,
+      status: room.status,
+    });
+    setRoomDialogOpen(true);
+  };
+
+  const createRoomM = useMutation({
+    mutationFn: (d: any) => apiClient.rooms.create(d),
+    onSuccess: async () => {
+      qc.invalidateQueries({ queryKey: ["rooms"] });
+      qc.invalidateQueries({ queryKey: ["dashboard"] });
+      await refreshRoomsStore();
+      toast.success(`Room ${roomForm.getValues("number")} created`);
+      setRoomDialogOpen(false);
+    },
+    onError: (e: any) => toast.error(e?.response?.data?.error || "Failed to create room"),
+  });
+
+  const updateRoomM = useMutation({
+    mutationFn: ({ id, data }: any) => apiClient.rooms.update(id, data),
+    onSuccess: async () => {
+      qc.invalidateQueries({ queryKey: ["rooms"] });
+      qc.invalidateQueries({ queryKey: ["dashboard"] });
+      await refreshRoomsStore();
+      toast.success("Room updated");
+      setRoomDialogOpen(false);
+    },
+    onError: (e: any) => toast.error(e?.response?.data?.error || "Failed to update room"),
+  });
+
+  const deleteRoomM = useMutation({
+    mutationFn: (id: string) => apiClient.rooms.remove(id),
+    onSuccess: async () => {
+      qc.invalidateQueries({ queryKey: ["rooms"] });
+      qc.invalidateQueries({ queryKey: ["dashboard"] });
+      await refreshRoomsStore();
+      toast.success("Room deleted");
+    },
+    onError: (e: any) => toast.error(e?.response?.data?.error || "Failed to delete room"),
+  });
+
+  const handleRoomFormSubmit = (d: any) => {
+    if (!editingRoom && (!d.number || !String(d.number).trim())) {
+      toast.error("Room number is required");
+      return;
+    }
+    if (editingRoom) {
+      updateRoomM.mutate({
+        id: String(editingRoom.id),
+        data: {
+          status: d.status,
+          rate: Number(d.rate),
+          floor: Number(d.floor),
+          isAvailable: d.status === "vacant",
+        },
+      });
+    } else {
+      createRoomM.mutate({
+        number: String(d.number).trim(),
+        type: d.type,
+        floor: Number(d.floor),
+        rate: Number(d.rate),
+        capacity: Number(d.capacity),
+        status: "vacant",
+      });
+    }
+  };
+
+  const handleDeleteRoom = (room: Room) => {
+    if (!window.confirm(`Delete Room ${room.number}? This cannot be undone.`)) return;
+    deleteRoomM.mutate(String(room.id));
+  };
 
   // Available floors extracted from the room inventory
   const allFloors = useMemo(() => {
@@ -158,6 +277,7 @@ export default function RoomStatusBoard({ rooms, onRoomClick }: RoomStatusBoardP
   };
 
   return (
+    <>
     <Card className="overflow-hidden border-border/70 shadow-xs">
       <CardHeader className="pb-4 border-b border-border/40">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
@@ -170,6 +290,10 @@ export default function RoomStatusBoard({ rooms, onRoomClick }: RoomStatusBoardP
               <Sparkles className="h-3 w-3" />
               {t("dashboard.roomsCount", { count: sortedRooms.length })}
             </div>
+            <Button size="sm" onClick={openAddRoom} className="h-7 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold px-3">
+              <Plus className="h-3.5 w-3.5 mr-1" />
+              Add Room
+            </Button>
           </div>
 
           <div className="flex flex-wrap items-center gap-2.5">
@@ -423,10 +547,24 @@ export default function RoomStatusBoard({ rooms, onRoomClick }: RoomStatusBoardP
                                   </div>
                                 </td>
                                 <td className="px-4 py-2.5 text-right">
-                                  <Button size="sm" variant="ghost" className="h-7 px-2 text-xs">
-                                    <Eye className="h-3.5 w-3.5 mr-1" />
-                                    View
-                                  </Button>
+                                  <div className="flex items-center justify-end gap-1">
+                                    <Button size="sm" variant="ghost" className="h-7 px-2 text-xs">
+                                      <Eye className="h-3.5 w-3.5 mr-1" />
+                                      View
+                                    </Button>
+                                    <Button
+                                      size="sm" variant="ghost" className="h-7 w-7 p-0"
+                                      onClick={(e) => { e.stopPropagation(); openEditRoom(room); }}
+                                    >
+                                      <Pencil className="h-3.5 w-3.5" />
+                                    </Button>
+                                    <Button
+                                      size="sm" variant="ghost" className="h-7 w-7 p-0 text-destructive"
+                                      onClick={(e) => { e.stopPropagation(); handleDeleteRoom(room); }}
+                                    >
+                                      <Trash2 className="h-3.5 w-3.5" />
+                                    </Button>
+                                  </div>
                                 </td>
                               </tr>
                             );
@@ -476,6 +614,24 @@ export default function RoomStatusBoard({ rooms, onRoomClick }: RoomStatusBoardP
                               className="absolute top-2.5 right-2.5 h-2 w-2 rounded-full ring-2 ring-background shrink-0"
                               style={{ backgroundColor: config.dotColor }}
                             />
+
+                            {/* Edit/Delete actions, shown on hover */}
+                            <div className="absolute top-1.5 left-1.5 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                              <button
+                                onClick={(e) => { e.stopPropagation(); openEditRoom(room); }}
+                                className="h-6 w-6 flex items-center justify-center rounded-md bg-background/90 border border-border/60 text-muted-foreground hover:text-foreground"
+                                title="Edit room"
+                              >
+                                <Pencil className="h-3 w-3" />
+                              </button>
+                              <button
+                                onClick={(e) => { e.stopPropagation(); handleDeleteRoom(room); }}
+                                className="h-6 w-6 flex items-center justify-center rounded-md bg-background/90 border border-border/60 text-destructive hover:text-destructive"
+                                title="Delete room"
+                              >
+                                <Trash2 className="h-3 w-3" />
+                              </button>
+                            </div>
 
                             {/* Room number and Type */}
                             <div>
@@ -554,5 +710,85 @@ export default function RoomStatusBoard({ rooms, onRoomClick }: RoomStatusBoardP
         )}
       </CardContent>
     </Card>
+
+    <Dialog open={roomDialogOpen} onOpenChange={setRoomDialogOpen}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle className="text-2xl font-bold">
+            {editingRoom ? `Edit Room ${editingRoom.number}` : "Add Room"}
+          </DialogTitle>
+        </DialogHeader>
+        <Form {...roomForm}>
+          <form onSubmit={roomForm.handleSubmit(handleRoomFormSubmit)} className="space-y-4 pt-2">
+            {!editingRoom && (
+              <div className="grid grid-cols-2 gap-4">
+                <FormItem>
+                  <FormLabel className="font-semibold">Room Number *</FormLabel>
+                  <FormControl>
+                    <Input placeholder="e.g. 103" {...roomForm.register("number")} />
+                  </FormControl>
+                </FormItem>
+                <FormItem>
+                  <FormLabel className="font-semibold">Room Type</FormLabel>
+                  <FormControl>
+                    <Input placeholder="e.g. Standard Queen" {...roomForm.register("type")} />
+                  </FormControl>
+                </FormItem>
+              </div>
+            )}
+            <div className="grid grid-cols-2 gap-4">
+              <FormItem>
+                <FormLabel className="font-semibold">Floor</FormLabel>
+                <FormControl>
+                  <Input type="number" min={0} {...roomForm.register("floor")} />
+                </FormControl>
+              </FormItem>
+              <FormItem>
+                <FormLabel className="font-semibold">Rate (₹/night)</FormLabel>
+                <FormControl>
+                  <Input type="number" min={0} {...roomForm.register("rate")} />
+                </FormControl>
+              </FormItem>
+            </div>
+            {!editingRoom && (
+              <FormItem>
+                <FormLabel className="font-semibold">Capacity (guests)</FormLabel>
+                <FormControl>
+                  <Input type="number" min={1} {...roomForm.register("capacity")} />
+                </FormControl>
+              </FormItem>
+            )}
+            {editingRoom && (
+              <FormItem>
+                <FormLabel className="font-semibold">Status</FormLabel>
+                <FormControl>
+                  <Select value={roomForm.watch("status")} onValueChange={(v) => roomForm.setValue("status", v)}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="vacant">Vacant</SelectItem>
+                      <SelectItem value="dirty">Dirty</SelectItem>
+                      <SelectItem value="maintenance">Out of Order / Maintenance</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </FormControl>
+              </FormItem>
+            )}
+            <div className="flex gap-3 justify-end pt-4">
+              <Button type="button" variant="outline" className="h-11 rounded-2xl px-6" onClick={() => setRoomDialogOpen(false)}>
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                className="h-11 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white font-semibold px-6"
+                disabled={createRoomM.isPending || updateRoomM.isPending}
+              >
+                {createRoomM.isPending || updateRoomM.isPending ? "Saving..." : editingRoom ? "Save Changes" : "Create Room"}
+              </Button>
+            </div>
+          </form>
+        </Form>
+      </DialogContent>
+    </Dialog>
+    </>
   );
 }

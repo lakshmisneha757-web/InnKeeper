@@ -78,6 +78,7 @@ import {
   createBookingWithPayment,
   verifyGuestId,
   processCheckInPayment,
+  processManualCheckInPayment,
   generateDigitalLockKey,
   unlockDoor,
   completeGuestCheckIn
@@ -102,6 +103,7 @@ router.post('/auth/reset-password', resetPassword);
 router.post('/checkin/book-with-payment', authenticateToken, createBookingWithPayment);
 router.post('/checkin/verify-id', authenticateToken, verifyGuestId);
 router.post('/checkin/process-payment', authenticateToken, processCheckInPayment);
+router.post('/checkin/manual-payment', authenticateToken, processManualCheckInPayment);
 router.post('/checkin/payment/order', authenticateToken, createPaymentOrder);
 router.post('/checkin/payment/verify', authenticateToken, verifyPayment);
 router.post('/checkin/generate-lock-key', authenticateToken, generateDigitalLockKey);

@@ -1,12 +1,14 @@
 import { useState, useEffect, useMemo } from "react";
 import { motion } from "framer-motion";
+import { useLocation } from "wouter";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { UserPlus, LogOut, Calendar, Loader2, Sparkles } from "lucide-react";
 import { useStore } from "@/lib/store";
-import { trpc } from "@/lib/trpc";
+import { apiClient } from "@/lib/api";
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
 
@@ -45,10 +47,24 @@ interface ArrivalsDeparturesProps {
 export default function ArrivalsDepartures({ rooms, reservations, guests }: ArrivalsDeparturesProps) {
   const { t } = useTranslation();
   const { updateRoomStatus, setSelectedRoom } = useStore();
-  const utils = (trpc as any).useUtils ? (trpc as any).useUtils() : null;
+  const [, setLocation] = useLocation();
+  const qc = useQueryClient();
 
-  const checkInMutation = (trpc as any).reservations?.checkIn?.useMutation ? (trpc as any).reservations.checkIn.useMutation() : { mutateAsync: async () => {}, isPending: false };
-  const checkOutMutation = (trpc as any).reservations?.checkOut?.useMutation ? (trpc as any).reservations.checkOut.useMutation() : { mutateAsync: async () => {}, isPending: false };
+  const checkOutMutation = useMutation({
+    mutationFn: async (res: Reservation) => {
+      await apiClient.reservations.update(String(res.id), { status: "checked_out" });
+      if (res.roomId) {
+        await apiClient.rooms.update(String(res.roomId), { status: "dirty", isAvailable: true });
+        await apiClient.housekeeping.create({
+          roomId: res.roomId,
+          status: "pending",
+          assignedTo: "Maria Rodriguez",
+          notes: "Guest Checked Out - Express Checkout",
+        }).catch(() => {});
+      }
+      return res;
+    },
+  });
 
   // Dynamic currentDate hook that updates live when the day changes
   const [currentDateStr, setCurrentDateStr] = useState<string>(() => new Date().toDateString());
@@ -70,8 +86,8 @@ export default function ArrivalsDepartures({ rooms, reservations, guests }: Arri
 
     return reservations.filter((r) => {
       const status = (r.status || '').toLowerCase();
-      // Display guests whose complete check-in (all 3 steps completed: status === checked_in) is on the current date
-      if (status !== "checked_in") return false;
+      // An arrival is a guest expected today who has NOT checked in yet
+      if (status !== "confirmed") return false;
 
       const checkInDate = new Date(r.checkIn);
       checkInDate.setHours(0, 0, 0, 0);
@@ -103,37 +119,22 @@ export default function ArrivalsDepartures({ rooms, reservations, guests }: Arri
     return rooms.find((r) => r.id === roomId);
   };
 
-  const handleCheckIn = async (res: Reservation) => {
-    if (!res.roomId) {
-      toast.error("Room not assigned yet");
-      return;
-    }
-    try {
-      await checkInMutation.mutateAsync({
-        reservationId: res.id,
-        roomId: res.roomId,
-      });
-      const room = getRoom(res.roomId);
-      if (room) updateRoomStatus(room.id, "occupied");
-      utils?.rooms?.list?.invalidate?.();
-      utils?.reservations?.list?.invalidate?.();
-      toast.success(`Checked in: ${getGuest(res.guestId)?.firstName || "Guest"}`);
-    } catch {
-      toast.error("Failed to check in");
-    }
+  const handleGoToCheckIn = () => {
+    // Real check-in requires ID verification + payment, so route staff to the
+    // dedicated Check-In & Keys wizard rather than completing it silently here.
+    setLocation("/checkin");
   };
 
   const handleCheckOut = async (res: Reservation) => {
     if (!res.roomId) return;
     try {
-      await checkOutMutation.mutateAsync({
-        reservationId: res.id,
-        roomId: res.roomId,
-      });
+      await checkOutMutation.mutateAsync(res);
       const room = getRoom(res.roomId);
       if (room) updateRoomStatus(room.id, "dirty");
-      utils?.rooms?.list?.invalidate?.();
-      utils?.reservations?.list?.invalidate?.();
+      qc.invalidateQueries({ queryKey: ["rooms"] });
+      qc.invalidateQueries({ queryKey: ["reservations"] });
+      qc.invalidateQueries({ queryKey: ["housekeeping"] });
+      qc.invalidateQueries({ queryKey: ["dashboard"] });
       toast.success(`Checked out: ${getGuest(res.guestId)?.firstName || "Guest"}`);
     } catch {
       toast.error("Failed to check out");
@@ -188,6 +189,18 @@ export default function ArrivalsDepartures({ rooms, reservations, guests }: Arri
                       {t("roomDrawer.roomNumber", { number: room?.number || "TBD" })}
                     </p>
                   </div>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="text-xs"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleGoToCheckIn();
+                    }}
+                  >
+                    <UserPlus className="h-3 w-3 mr-1" />
+                    {t("checkin.title", "Check In")}
+                  </Button>
                 </motion.div>
               );
             })

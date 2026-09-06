@@ -97,6 +97,8 @@ async function syncAllChannels(reason = 'Manual Sync', roomId = null) {
   const rooms = await prisma.room.findMany({ orderBy: { id: 'asc' } });
 
   for (const channel of channels) {
+    const startedAt = Date.now();
+
     for (const room of rooms) {
       await prisma.channelInventory.upsert({
         where: { channel_id_room_id: { channel_id: channel.id, room_id: room.id } },
@@ -110,13 +112,15 @@ async function syncAllChannels(reason = 'Manual Sync', roomId = null) {
       data: { connected: channel.connected, api_status: 'Healthy', last_sync: new Date() }
     });
 
+    const responseTimeSeconds = ((Date.now() - startedAt) / 1000).toFixed(1);
+
     await prisma.syncLog.create({
       data: {
         channel: channel.channel_name,
         room: roomId ? `${roomId}` : 'All Rooms',
         action: reason,
         status: 'Success',
-        response_time: `${(0.8 + Math.random() * 0.5).toFixed(1)}s`,
+        response_time: `${responseTimeSeconds}s`,
         message: `${channel.channel_name} synchronized for ${reason}`,
         created_at: new Date()
       }

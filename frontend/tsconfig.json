@@ -17,7 +17,7 @@
     "jsxImportSource": "react",
     "incremental": true,
     "paths": {
-      "@/*": ["./client/src/*", "./src/*"]
+      "@/*": ["./client/src/*"]
     }
   },
   "include": ["**/*.ts", "**/*.tsx"],

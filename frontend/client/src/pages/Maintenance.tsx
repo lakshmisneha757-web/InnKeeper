@@ -111,29 +111,31 @@ export default function MaintenancePage() {
       const apiRooms = normalizeList(roomsData).items;
       const allRooms = storeRooms.length > 0 ? storeRooms : apiRooms;
 
-      // Maintenance items are STRICTLY derived from rooms whose status is 'maintenance' in the rooms table
-      const activeMaintList: any[] = [];
+      // Maintenance tickets are the source of truth (works for both room-specific
+      // and general/property tickets); resolved ones drop off the active view.
+      const activeMaintList: any[] = list.filter((m: any) => m.status !== "resolved");
 
+      // Also surface any room flagged 'maintenance' that has no matching ticket yet
+      // (e.g. status changed outside this form) so the room isn't silently orphaned.
       allRooms.forEach((r: any) => {
         const roomStatus = r.status?.toLowerCase();
-
-        // ONLY rooms whose status in the Rooms list is 'maintenance' should appear in Maintenance!
         if (roomStatus === "maintenance") {
-          const existingTicket = list.find((m: any) =>
-            (String(m.roomId) === String(r.id) ||
-             String(m.roomId) === String(r.number) ||
-             String(m.roomId) === String(r.room_number)) &&
-            m.status !== "resolved"
+          const hasTicket = activeMaintList.some((m: any) =>
+            String(m.roomId) === String(r.id) ||
+            String(m.roomId) === String(r.number) ||
+            String(m.roomId) === String(r.room_number)
           );
 
-          activeMaintList.push(existingTicket || {
-            id: `maint-${r.id}`,
-            roomId: r.id,
-            issue: `Room ${r.number || r.room_number} reported under maintenance`,
-            priority: "high",
-            status: "open",
-            notes: "AC unit / hardware requires servicing and filter replacement.",
-          });
+          if (!hasTicket) {
+            activeMaintList.push({
+              id: `maint-${r.id}`,
+              roomId: r.id,
+              issue: `Room ${r.number || r.room_number} reported under maintenance`,
+              priority: "high",
+              status: "open",
+              notes: "AC unit / hardware requires servicing and filter replacement.",
+            });
+          }
         }
       });
 
@@ -158,7 +160,15 @@ export default function MaintenancePage() {
   });
 
   const createM = useMutation({
-    mutationFn: (d: any) => apiClient.maintenance.create({ ...d, roomId: d.roomId ? Number(d.roomId) : null }),
+    mutationFn: async (d: any) => {
+      const roomId = d.roomId ? Number(d.roomId) : null;
+      const result = await apiClient.maintenance.create({ ...d, roomId });
+      if (roomId) {
+        updateRoomStatus(roomId, "maintenance");
+        await apiClient.rooms.update(String(roomId), { status: "maintenance", isAvailable: false }).catch(() => {});
+      }
+      return result;
+    },
     onSuccess: (_, variables) => {
       qc.invalidateQueries({ queryKey: ["maintenance"] });
       qc.invalidateQueries({ queryKey: ["rooms"] });

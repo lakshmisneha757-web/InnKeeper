@@ -71,16 +71,28 @@ export async function getRoomNew(req, res) {
 export async function createRoomNew(req, res) {
   try {
     const { number, type, floor, status, rate, capacity } = req.body;
+    if (!number || !String(number).trim()) {
+      return res.status(400).json({ error: 'Room number is required.' });
+    }
+
+    const existing = await prisma.room.findUnique({ where: { room_number: String(number).trim() } });
+    if (existing) {
+      return res.status(409).json({ error: `Room ${number} already exists.` });
+    }
+
     // Find or create room_type
     let roomType = await prisma.roomType.findFirst({ where: { name: { contains: type, mode: 'insensitive' } } });
     if (!roomType) {
       roomType = await prisma.roomType.create({ data: { name: type || 'Standard', base_price: rate || 100, capacity: capacity || 2, description: '' } });
     }
     const room = await prisma.room.create({
-      data: { room_number: number, room_type_id: roomType.id, floor: floor || 1, status: status || 'Vacant', current_price: rate || roomType.base_price, availability: true }
+      data: { room_number: String(number).trim(), room_type_id: roomType.id, floor: floor || 1, status: status || 'Vacant', current_price: rate || roomType.base_price, availability: true }
     });
     res.status(201).json(room);
   } catch (err) {
+    if (err.code === 'P2002') {
+      return res.status(409).json({ error: `Room ${req.body?.number} already exists.` });
+    }
     res.status(500).json({ error: err.message });
   }
 }

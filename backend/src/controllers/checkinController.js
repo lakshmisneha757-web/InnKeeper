@@ -315,6 +315,60 @@ export async function processCheckInPayment(req, res) {
   }
 }
 
+// Alternative to Razorpay: record a manual/cash/card-at-desk payment collected by front desk staff.
+export async function processManualCheckInPayment(req, res) {
+  try {
+    const reservationId = Number(req.body?.reservationId);
+    const method = String(req.body?.method || 'Cash').trim() || 'Cash';
+    if (!Number.isInteger(reservationId) || reservationId <= 0) {
+      return res.status(400).json({ error: 'Reservation ID is required' });
+    }
+
+    const reservation = await prisma.reservation.findUnique({
+      where: { id: reservationId },
+      include: { guest: true }
+    });
+
+    if (!reservation) {
+      return res.status(404).json({ error: 'Reservation not found' });
+    }
+
+    if (reservation.verificationStatus !== 'VERIFIED') {
+      return res.status(400).json({ error: 'ID Verification (Driver License & Selfie) must be completed and verified before processing check-in payment.' });
+    }
+
+    if ((reservation.status || '').toLowerCase().includes('check')) {
+      return res.status(400).json({ error: 'You have already checked-in' });
+    }
+
+    const amount = Number(reservation.totalCharges) || 0;
+    if (amount <= 0) {
+      return res.status(400).json({ error: 'Reservation has no outstanding balance to collect.' });
+    }
+
+    const gName = reservation.guest ? `${reservation.guest.firstName} ${reservation.guest.lastName}`.trim() : 'Guest';
+    const payment = await prisma.payment.create({
+      data: {
+        reservationId: reservation.id,
+        amount,
+        method,
+        paymentStatus: 'Paid',
+        gatewayStatus: 'manual',
+        notes: `Manual payment (${method}) collected at front desk for ${gName} (Reservation #${reservation.id})`,
+      }
+    });
+
+    res.json({
+      success: true,
+      message: `Payment of ₹${amount} recorded via ${method}.`,
+      payment,
+      reservation
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+}
+
 // Complete Guest Check-In Endpoint
 export async function completeGuestCheckIn(req, res) {
   try {
@@ -332,13 +386,13 @@ export async function completeGuestCheckIn(req, res) {
       return res.status(404).json({ error: 'Reservation not found' });
     }
 
+    // Accept any confirmed payment toward this reservation - Razorpay (gatewayStatus
+    // 'captured') or a manual/cash payment recorded at the front desk (gatewayStatus 'manual').
     const paidPayments = await prisma.payment.aggregate({
       _sum: { amount: true },
       where: {
         reservationId: reservation.id,
         paymentStatus: 'Paid',
-        gatewayStatus: 'captured',
-        razorpayPaymentId: { not: null },
       },
     });
     const paidAmount = Number(paidPayments._sum.amount || 0);
@@ -351,8 +405,6 @@ export async function completeGuestCheckIn(req, res) {
       return res.status(400).json({ error: 'Identity Verification (Driver License & Selfie) must be completed before finalizing check-in.' });
     }
 
-    const actualAmount = reservation.paidAmount > 0 ? reservation.paidAmount : (reservation.totalCharges || 299);
-
     // 1. Update reservation status to checked_in
     const updated = await prisma.reservation.update({
       where: { id: Number(reservationId) },
@@ -360,7 +412,6 @@ export async function completeGuestCheckIn(req, res) {
         status: 'checked_in',
         verificationStatus: 'VERIFIED',
         paidAmount,
-        paidAmount: actualAmount,
       },
       include: { guest: true }
     });
