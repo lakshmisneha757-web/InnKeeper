@@ -1,8 +1,12 @@
 import axios from "axios";
 
+// Vite only exposes env vars prefixed VITE_ to client code (via import.meta.env,
+// not process.env, which Next.js uses but this project does not run on).
+// Falls back to the relative "/api" path used by the local dev proxy in vite.config.ts.
+const apiUrl = import.meta.env.VITE_API_BASE_URL || "/api";
 
 const api = axios.create({
-  baseURL: "/api",
+  baseURL: apiUrl,
   headers: { "Content-Type": "application/json" },
   withCredentials: true,
 });
